@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Top-{{ k }} Examples</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+          integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <style>
+        .head {
+            color: #ee6666;
+            font-weight: bold;
+        }
+
+        .tail {
+            color: #3388bb;
+            font-weight: bold;
+        }
+
+        .border-row-td {
+            border-bottom: solid 1px black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .border-row-tr {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .border-col-td {
+            border-right: solid 1px black !important;
+        }
+
+        #scores {
+            position: fixed;
+            height: 200px;
+            margin: 20px;
+            background-color: #f3f3f3;
+            box-shadow: 0 0 4px 4px #aaa;
+            bottom: 20px;
+            right: 20px;
+        }
+
+        .tp {
+            background-color: #c9eec1;
+        }
+
+        .fn {
+            background-color: #ffd5cb;
+        }
+
+        .fp {
+            background-color: #e7ecfc;
+        }
+
+        .doc-perfect {
+            color: #03e06f;
+        }
+
+        .doc-good {
+            color: #e0ca4f;
+        }
+
+        .doc-bad {
+            color: #ff2942;
+        }
+
+        .vertical-center {
+            display: flex;
+            align-items: center;
+        }
+
+        .doc {
+            margin-bottom: 10px;
+        }
+
+        .doc-text {
+            white-space:normal;
+        }
+
+    </style>
+</head>
+<body style="overflow-x:scroll; white-space: nowrap; padding-left: 10px; padding-top: 10px;">
+
+<h2> Relation Extraction Examples ({{ examples|length }}) </h2>
+
+<div id="evaluation">
+    <div id="accordion">
+        {% for example in examples %}
+            {% set outer_loop = loop %}
+
+            <div class="card doc">
+                <div class="collapsed" data-toggle="collapse"
+                     data-target="#collapse-{{ loop.index0 }}" style="cursor: pointer;">
+                    <div class="card-header" id="heading-{{ loop.index0 }}">
+                        <div class="row vertical-center">
+                            <div class="col-1 vertical-center">
+                                ({{ loop.index0 }}) &nbsp;
+                                {% if example["f1"] == 100 %}
+                                    <i class="material-icons doc-perfect">check_circle_outline</i>
+                                {% elif example["f1"] >= 0.5 %}
+                                    <i class="material-icons doc-good">check_circle_outline</i>
+                                {% else %}
+                                    <i class="material-icons doc-bad">highlight_off</i>
+                                {% endif %}
+                            </div>
+
+                            <div class="col">
+                                <div class="doc-text">
+                                    <b>{{ example["text"] | safe }}</b>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-sm">
+                                        Precision: {{ "%.2f"|format(example["precision"]) }}
+                                    </div>
+                                    <div class="col-sm">
+                                        Recall: {{ "%.2f"|format(example["recall"]) }}
+                                    </div>
+                                    <div class="col-sm">
+                                        F1: {{ "%.2f"|format(example["f1"]) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="collapse-{{ loop.index0 }}" class="collapse" data-parent="#accordion">
+                    <div class="card-body">
+
+                        <table class="table table-bordered">
+                            <thead>
+                            <tr>
+                                <th>Score</th>
+
+                                <th class="border-col-td">Other</th>
+
+                                <th>Relation</th>
+                                <th>Text (<span class="head">Head</span> - <span class="tail">Tail</span>)</th>
+                                <th>Comment</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            {% for tp in example["tp"] %}
+                                <tr class="tp">
+                                    <td>
+                                        {{ "%.4f"|format(tp[2]) }}
+                                    </td>
+
+                                    <td></td>
+
+                                    <td><b>"{{ tp[1] }}"</b></td>
+                                    <td>{{ tp[0] | safe }}</td>
+                                    <td>
+                                                <textarea class="form-control" rows="1"
+                                                          id="comment-{{ outer_loop.index0 }}-{{ loop.index0 }}"></textarea>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+
+                            {% for fn in example["fn"] %}
+                                <tr class="fn">
+                                    <td></td>
+
+                                    <td class="border-col-td"></td>
+
+                                    <td><b>"{{ fn[1] }}"</b></td>
+                                    <td>{{ fn[0] | safe }}</td>
+                                    <td>
+                                                <textarea class="form-control" rows="1"
+                                                          id="comment-{{ loop.index0 }}"></textarea>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+
+                            {% for fp in example["fp"] %}
+                                <tr class="fp">
+                                    <td>
+                                        {{ "%.4f"|format(fp[2]) }}
+                                    </td>
+
+                                    <td>
+                                        <input type="checkbox" class="score-checkbox"
+                                               id="chk-other-{{ outer_loop.index0 }}-{{ loop.index0 }}"/>
+                                    </td>
+
+                                    <td><b>"{{ fp[1] }}"</b></td>
+                                    <td>{{ fp[0] | safe }}</td>
+                                    <td>
+                                                <textarea class="form-control" rows="1"
+                                                          id="comment-{{ outer_loop.index0 }}-{{ loop.index0 }}"></textarea>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+
+                            <tr class="border-row-tr">
+                                <td class="border-row-td"></td>
+                                <td class="border-row-td"></td>
+                                <td class="border-row-td"></td>
+                                <td class="border-row-td"></td>
+                                <td class="border-row-td"></td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+</body>
+</html>
