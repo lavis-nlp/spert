@@ -11,7 +11,7 @@ PyTorch code for "SpERT: Span-based Entity and Relation Transformer"
   - tqdm (tested with version 4.19.5)
   - numpy (tested with version 1.17.4)
 - Optional
-  - jinja2 (tested with version 2.10) - if installed, used to export relation extraction examples
+  - jinja2 (tested with version 2.10.3) - if installed, used to export relation extraction examples
   - tensorboardX (tested with version 1.6) - if installed, used to save training process to tensorboard
 
 ### Fetch data
