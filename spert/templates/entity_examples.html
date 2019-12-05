@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Entity Extraction Examples</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+          integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <style>
+        .entity {
+            font-weight: bold;
+            display:inline-block;
+            text-align:center;
+        }
+
+        .type {
+            display:block;
+            font-size:12px;
+        }
+
+        .border-row-td {
+            border-bottom: solid 1px black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .border-row-tr {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .border-col-td {
+            border-right: solid 1px black !important;
+        }
+
+        .tp {
+            background-color: #c9eec1;
+        }
+
+        .fp {
+            background-color: #e7ecfc;
+        }
+
+        .fn {
+            background-color: #ffd5cb;
+        }
+
+        .tp-box {
+            float:left;
+            background-color: #c9eec1;
+            border: solid 1px black;
+            width: 20px;
+            height: 20px;
+        }
+
+        .fp-box {
+            float:left;
+            background-color: #e7ecfc;
+            border: solid 1px black;
+            width: 20px;
+            height: 20px;
+        }
+
+        .fn-box {
+            float:left;
+            background-color: #ffd5cb;
+            border: solid 1px black;
+            width: 20px;
+            height: 20px;
+        }
+
+        .doc-perfect {
+            color: #03e06f;
+            vertical-align: middle;
+        }
+
+        .doc-good {
+            color: #e0ca4f;
+            vertical-align: middle;
+        }
+
+        .doc-bad {
+            color: #ff2942;
+            vertical-align: middle;
+        }
+
+        .vertical-center {
+            display: flex;
+            align-items: center;
+        }
+
+        .doc {
+            margin-bottom: 10px;
+        }
+
+        .doc-text {
+            white-space: normal;
+        }
+
+    </style>
+</head>
+<body style="overflow-x:scroll; white-space: nowrap; padding-left: 10px; padding-top: 10px;">
+
+<h2> Entity Extraction Examples ({{ examples|length }}) </h2>
+
+<div class="row">
+    <div class="col-sm">
+        <i class="material-icons doc-perfect">check_circle_outline</i> &nbsp; F1 = 100.000 <br>
+        <i class="material-icons doc-good">check_circle_outline</i> &nbsp; F1 >= 50.00<br>
+        <i class="material-icons doc-bad">highlight_off</i> &nbsp; F1 < 50.00 <br>
+    </div>
+
+    <div class="col-sm">
+        <div class="tp-box"></div>
+        &nbsp; True Positive &nbsp; <br>
+        <span class="fp-box"></span> &nbsp; False Positive &nbsp; <br>
+        <span class="fn-box"></span> &nbsp; False Negative <br>
+    </div>
+</div>
+<p></p>
+
+<div id="evaluation">
+    <div id="accordion">
+        {% for example in examples %}
+            {% set outer_loop = loop %}
+
+            <div class="card doc">
+                <div class="collapsed" data-toggle="collapse"
+                     data-target="#collapse-{{ loop.index0 }}" style="cursor: pointer;">
+                    <div class="card-header" id="heading-{{ loop.index0 }}">
+                        <div class="row vertical-center">
+                            <div class="col-1 vertical-center">
+                                ({{ loop.index0 }}) &nbsp;
+                                {% if example["f1"] == 100 %}
+                                    <i class="material-icons doc-perfect">check_circle_outline</i>
+                                {% elif example["f1"] >= 50 %}
+                                    <i class="material-icons doc-good">check_circle_outline</i>
+                                {% else %}
+                                    <i class="material-icons doc-bad">highlight_off</i>
+                                {% endif %}
+                            </div>
+
+                            <div class="col">
+                                <div class="doc-text">
+                                    <b>{{ example["text"] | safe }}</b>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-sm">
+                                        Precision: {{ "%.2f"|format(example["precision"]) }}
+                                    </div>
+                                    <div class="col-sm">
+                                        Recall: {{ "%.2f"|format(example["recall"]) }}
+                                    </div>
+                                    <div class="col-sm">
+                                        F1: {{ "%.2f"|format(example["f1"]) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="collapse-{{ loop.index0 }}" class="collapse" data-parent="#accordion">
+                    <div class="card-body">
+
+                        <table class="table table-bordered">
+                            <thead>
+                            <tr>
+                                <th>Score</th>
+                                <th>Text</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            {% for tp in example["tp"] %}
+                                <tr class="tp">
+                                    <td>
+                                        {{ "%.4f"|format(tp[2]) }}
+                                    </td>
+                                    <td>{{ tp[0] | safe }}</td>
+                                </tr>
+                            {% endfor %}
+
+                            {% for fp in example["fp"] %}
+                                <tr class="fp">
+                                    <td>
+                                        {{ "%.4f"|format(fp[2]) }}
+                                    </td>
+                                    <td>{{ fp[0] | safe }}</td>
+                                </tr>
+                            {% endfor %}
+
+                            {% for fn in example["fn"] %}
+                                <tr class="fn">
+                                    <td></td>
+                                    <td>{{ fn[0] | safe }}</td>
+                                </tr>
+                            {% endfor %}
+
+                            <tr class="border-row-tr">
+                                <td class="border-row-td"></td>
+                                <td class="border-row-td"></td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+</body>
+</html>
