@@ -242,6 +242,8 @@ class Evaluator:
 
     def _convert_by_setting(self, gt: List[List[Tuple]], pred: List[List[Tuple]],
                             include_entity_types: bool = True, include_score: bool = False):
+        assert len(gt) == len(pred)
+
         # either include or remove entity types based on setting
         def convert(t):
             if not include_entity_types:
