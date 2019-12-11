@@ -334,7 +334,6 @@ class Dataset:
 
         self._documents = OrderedDict()
         self._entities = OrderedDict()
-        self._entities = OrderedDict()
         self._relations = OrderedDict()
 
         # current ids
@@ -354,6 +353,13 @@ class Dataset:
         self._tid += 1
         return token
 
+    def create_document(self, tokens, entity_mentions, relations, doc_encoding) -> Document:
+        document = Document(self._doc_id, tokens, entity_mentions, relations, doc_encoding)
+        self._documents[self._doc_id] = document
+        self._doc_id += 1
+
+        return document
+
     def create_entity(self, entity_type, tokens, phrase) -> Entity:
         mention = Entity(self._eid, entity_type, tokens, phrase)
         self._entities[self._eid] = mention
@@ -365,13 +371,6 @@ class Dataset:
         self._relations[self._rid] = relation
         self._rid += 1
         return relation
-
-    def create_document(self, tokens, entity_mentions, relations, doc_encoding) -> Document:
-        document = Document(self._doc_id, tokens, entity_mentions, relations, doc_encoding)
-        self._documents[self._doc_id] = document
-        self._doc_id += 1
-
-        return document
 
     @property
     def label(self):
