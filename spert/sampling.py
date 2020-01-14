@@ -288,8 +288,9 @@ def _create_train_sample(doc, neg_entity_count, neg_rel_count, max_span_size, co
                 neg_entity_sizes.append(size)
 
     # sample negative entities
-    neg_entity_spans, neg_entity_sizes = zip(*random.sample(list(zip(neg_entity_spans, neg_entity_sizes)),
-                                                            min(len(neg_entity_spans), neg_entity_count)))
+    neg_entity_samples = random.sample(list(zip(neg_entity_spans, neg_entity_sizes)),
+                                       min(len(neg_entity_spans), neg_entity_count))
+    neg_entity_spans, neg_entity_sizes = zip(*neg_entity_samples) if neg_entity_samples else ([], [])
 
     neg_entity_masks = [create_entity_mask(*span, context_size) for span in neg_entity_spans]
     neg_entity_types = [0] * len(neg_entity_spans)
