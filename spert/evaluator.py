@@ -99,7 +99,8 @@ class Evaluator:
         print("Evaluation")
 
         print("")
-        print("--- Entities (NER) ---")
+        print("--- Entities (named entity recognition (NER)) ---")
+        print("An entity is considered correct if the entity type and span is predicted correctly")
         print("")
         gt, pred = self._convert_by_setting(self._gt_entities, self._pred_entities, include_entity_types=True)
         ner_eval = self._score(gt, pred, print_results=True)
@@ -107,16 +108,22 @@ class Evaluator:
         print("")
         print("--- Relations ---")
         print("")
-        print("Without NER")
+        print("Without named entity classification (NEC)")
+        print("A relation is considered correct if the relation type and the spans of the two "
+              "related entities are predicted correctly (entity type is not considered)")
+        print("")
         gt, pred = self._convert_by_setting(self._gt_relations, self._pred_relations, include_entity_types=False)
         rel_eval = self._score(gt, pred, print_results=True)
 
         print("")
-        print("With NER")
+        print("With named entity classification (NEC)")
+        print("A relation is considered correct if the relation type and the two "
+              "related entities are predicted correctly (in span and entity type)")
+        print("")
         gt, pred = self._convert_by_setting(self._gt_relations, self._pred_relations, include_entity_types=True)
-        rel_ner_eval = self._score(gt, pred, print_results=True)
+        rel_nec_eval = self._score(gt, pred, print_results=True)
 
-        return ner_eval, rel_eval, rel_ner_eval
+        return ner_eval, rel_eval, rel_nec_eval
 
     def store_examples(self):
         if jinja2 is None:
@@ -125,7 +132,7 @@ class Evaluator:
 
         entity_examples = []
         rel_examples = []
-        rel_examples_ner = []
+        rel_examples_nec = []
 
         for i, doc in enumerate(self._dataset.documents):
             # entities
@@ -140,9 +147,9 @@ class Evaluator:
             rel_examples.append(rel_example)
 
             # with entity types
-            rel_example_ner = self._convert_example(doc, self._gt_relations[i], self._pred_relations[i],
+            rel_example_nec = self._convert_example(doc, self._gt_relations[i], self._pred_relations[i],
                                                     include_entity_types=True, to_html=self._rel_to_html)
-            rel_examples_ner.append(rel_example_ner)
+            rel_examples_nec.append(rel_example_nec)
 
         label, epoch = self._dataset_label, self._epoch
 
@@ -168,13 +175,13 @@ class Evaluator:
                              template='relation_examples.html')
 
         # with entity types
-        self._store_examples(rel_examples_ner[:self._example_count],
-                             file_path=self._examples_path % ('rel_ner', label, epoch),
+        self._store_examples(rel_examples_nec[:self._example_count],
+                             file_path=self._examples_path % ('rel_nec', label, epoch),
                              template='relation_examples.html')
 
-        self._store_examples(sorted(rel_examples_ner[:self._example_count],
+        self._store_examples(sorted(rel_examples_nec[:self._example_count],
                                     key=lambda k: k['length']),
-                             file_path=self._examples_path % ('rel_ner_sorted', label, epoch),
+                             file_path=self._examples_path % ('rel_nec_sorted', label, epoch),
                              template='relation_examples.html')
 
     def _convert_gt(self, docs: List[Document]):

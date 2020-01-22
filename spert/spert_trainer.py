@@ -241,8 +241,8 @@ class SpERTTrainer(BaseTrainer):
                 evaluator.eval_batch(entity_clf, rel_clf, rels, batch)
 
         global_iteration = epoch * updates_epoch + iteration
-        ner_eval, rel_eval, rel_ner_eval = evaluator.compute_scores()
-        self._log_eval(*ner_eval, *rel_eval, *rel_ner_eval,
+        ner_eval, rel_eval, rel_nec_eval = evaluator.compute_scores()
+        self._log_eval(*ner_eval, *rel_eval, *rel_nec_eval,
                        epoch, iteration, global_iteration, dataset.label)
 
         if self.args.store_examples:
@@ -281,8 +281,8 @@ class SpERTTrainer(BaseTrainer):
                   rel_prec_micro: float, rel_rec_micro: float, rel_f1_micro: float,
                   rel_prec_macro: float, rel_rec_macro: float, rel_f1_macro: float,
 
-                  rel_ner_prec_micro: float, rel_ner_rec_micro: float, rel_ner_f1_micro: float,
-                  rel_ner_prec_macro: float, rel_ner_rec_macro: float, rel_ner_f1_macro: float,
+                  rel_nec_prec_micro: float, rel_nec_rec_micro: float, rel_nec_f1_micro: float,
+                  rel_nec_prec_macro: float, rel_nec_rec_macro: float, rel_nec_f1_macro: float,
                   epoch: int, iteration: int, global_iteration: int, label: str):
 
         # log to tensorboard
@@ -300,12 +300,12 @@ class SpERTTrainer(BaseTrainer):
         self._log_tensorboard(label, 'eval/rel_recall_macro', rel_rec_macro, global_iteration)
         self._log_tensorboard(label, 'eval/rel_f1_macro', rel_f1_macro, global_iteration)
 
-        self._log_tensorboard(label, 'eval/rel_ner_prec_micro', rel_ner_prec_micro, global_iteration)
-        self._log_tensorboard(label, 'eval/rel_ner_recall_micro', rel_ner_rec_micro, global_iteration)
-        self._log_tensorboard(label, 'eval/rel_ner_f1_micro', rel_ner_f1_micro, global_iteration)
-        self._log_tensorboard(label, 'eval/rel_ner_prec_macro', rel_ner_prec_macro, global_iteration)
-        self._log_tensorboard(label, 'eval/rel_ner_recall_macro', rel_ner_rec_macro, global_iteration)
-        self._log_tensorboard(label, 'eval/rel_ner_f1_macro', rel_ner_f1_macro, global_iteration)
+        self._log_tensorboard(label, 'eval/rel_nec_prec_micro', rel_nec_prec_micro, global_iteration)
+        self._log_tensorboard(label, 'eval/rel_nec_recall_micro', rel_nec_rec_micro, global_iteration)
+        self._log_tensorboard(label, 'eval/rel_nec_f1_micro', rel_nec_f1_micro, global_iteration)
+        self._log_tensorboard(label, 'eval/rel_nec_prec_macro', rel_nec_prec_macro, global_iteration)
+        self._log_tensorboard(label, 'eval/rel_nec_recall_macro', rel_nec_rec_macro, global_iteration)
+        self._log_tensorboard(label, 'eval/rel_nec_f1_macro', rel_nec_f1_macro, global_iteration)
 
         # log to csv
         self._log_csv(label, 'eval', ner_prec_micro, ner_rec_micro, ner_f1_micro,
@@ -314,8 +314,8 @@ class SpERTTrainer(BaseTrainer):
                       rel_prec_micro, rel_rec_micro, rel_f1_micro,
                       rel_prec_macro, rel_rec_macro, rel_f1_macro,
 
-                      rel_ner_prec_micro, rel_ner_rec_micro, rel_ner_f1_micro,
-                      rel_ner_prec_macro, rel_ner_rec_macro, rel_ner_f1_macro,
+                      rel_nec_prec_micro, rel_nec_rec_micro, rel_nec_f1_micro,
+                      rel_nec_prec_macro, rel_nec_rec_macro, rel_nec_f1_macro,
                       epoch, iteration, global_iteration)
 
     def _log_datasets(self, input_reader):
@@ -350,6 +350,6 @@ class SpERTTrainer(BaseTrainer):
                                                  'ner_prec_macro', 'ner_rec_macro', 'ner_f1_macro',
                                                  'rel_prec_micro', 'rel_rec_micro', 'rel_f1_micro',
                                                  'rel_prec_macro', 'rel_rec_macro', 'rel_f1_macro',
-                                                 'rel_ner_prec_micro', 'rel_ner_rec_micro', 'rel_ner_f1_micro',
-                                                 'rel_ner_prec_macro', 'rel_ner_rec_macro', 'rel_ner_f1_macro',
+                                                 'rel_nec_prec_micro', 'rel_nec_rec_micro', 'rel_nec_f1_micro',
+                                                 'rel_nec_prec_macro', 'rel_nec_rec_macro', 'rel_nec_f1_macro',
                                                  'epoch', 'iteration', 'global_iteration']})
