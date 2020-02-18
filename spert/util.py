@@ -132,22 +132,32 @@ def get_as_list(dic, key):
         return []
 
 
-def extend_tensor(tensor, c, dim=0, fill=0):
-    shape = list(tensor.shape)
-    shape[dim] = c
-    extension = torch.zeros(shape, dtype=tensor.dtype).to(tensor.device)
-    extension = extension.fill_(fill)
-    extended_tensor = torch.cat([tensor, extension], dim=dim)
+def extend_tensor(tensor, extended_shape, fill=0):
+    tensor_shape = tensor.shape
+
+    extended_tensor = torch.zeros(extended_shape, dtype=tensor.dtype).to(tensor.device)
+    extended_tensor = extended_tensor.fill_(fill)
+
+    if len(tensor_shape) == 1:
+        extended_tensor[:tensor_shape[0]] = tensor
+    elif len(tensor_shape) == 2:
+        extended_tensor[:tensor_shape[0], :tensor_shape[1]] = tensor
+    elif len(tensor_shape) == 3:
+        extended_tensor[:tensor_shape[0], :tensor_shape[1], :tensor_shape[2]] = tensor
+    elif len(tensor_shape) == 4:
+        extended_tensor[:tensor_shape[0], :tensor_shape[1], :tensor_shape[2], :tensor_shape[3]] = tensor
+
     return extended_tensor
 
 
 def padded_stack(tensors, padding=0):
-    max_size = max([t.shape[0] for t in tensors])
+    dim_count = len(tensors[0].shape)
+
+    max_shape = [max([t.shape[d] for t in tensors]) for d in range(dim_count)]
     padded_tensors = []
 
     for t in tensors:
-        s = max_size - t.shape[0]
-        e = extend_tensor(t, s, dim=0, fill=padding)
+        e = extend_tensor(t, max_shape, fill=padding)
         padded_tensors.append(e)
 
     stacked = torch.stack(padded_tensors)
@@ -171,3 +181,11 @@ def padded_nonzero(tensor, padding=0):
 
 def swap(v1, v2):
     return v2, v1
+
+
+def to_device(batch, device):
+    converted_batch = dict()
+    for key in batch.keys():
+        converted_batch[key] = batch[key].to(device)
+
+    return converted_batch

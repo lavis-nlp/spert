@@ -9,7 +9,6 @@ from transformers import BertTokenizer
 from spert.entities import Document, Dataset, EntityType
 from spert.input_reader import JsonInputReader
 from spert.opt import jinja2
-from spert.sampling import EvalTensorBatch
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -42,14 +41,14 @@ class Evaluator:
         self._convert_gt(self._dataset.documents)
 
     def eval_batch(self, batch_entity_clf: torch.tensor, batch_rel_clf: torch.tensor,
-                   batch_rels: torch.tensor, batch: EvalTensorBatch):
+                   batch_rels: torch.tensor, batch: dict):
         batch_size = batch_rel_clf.shape[0]
         rel_class_count = batch_rel_clf.shape[2]
 
         # get maximum activation (index of predicted entity type)
         batch_entity_types = batch_entity_clf.argmax(dim=-1)
         # apply entity sample mask
-        batch_entity_types *= batch.entity_sample_masks.long()
+        batch_entity_types *= batch['entity_sample_masks'].long()
 
         batch_rel_clf = batch_rel_clf.view(batch_size, -1)
 
@@ -72,7 +71,7 @@ class Evaluator:
             rels = batch_rels[i][rel_indices]
 
             # get masks of entities in relation
-            rel_entity_spans = batch.entity_spans[i][rels].long()
+            rel_entity_spans = batch['entity_spans'][i][rels].long()
 
             # get predicted entity types
             rel_entity_types = torch.zeros([rels.shape[0], 2])
@@ -87,7 +86,7 @@ class Evaluator:
             # get entities that are not classified as 'None'
             valid_entity_indices = entity_types.nonzero().view(-1)
             valid_entity_types = entity_types[valid_entity_indices]
-            valid_entity_spans = batch.entity_spans[i][valid_entity_indices]
+            valid_entity_spans = batch['entity_spans'][i][valid_entity_indices]
             valid_entity_scores = torch.gather(batch_entity_clf[i][valid_entity_indices], 1,
                                                valid_entity_types.unsqueeze(1)).view(-1)
 

@@ -12,7 +12,8 @@ from spert.entities import Dataset, EntityType, RelationType, Entity, Relation, 
 
 
 class BaseInputReader(ABC):
-    def __init__(self, types_path: str, tokenizer: BertTokenizer, logger: Logger = None):
+    def __init__(self, types_path: str, tokenizer: BertTokenizer, neg_entity_count: int = None,
+                 neg_rel_count: int = None, max_span_size: int = None, logger: Logger = None):
         types = json.load(open(types_path), object_pairs_hook=OrderedDict)  # entity + relation types
 
         self._entity_types = OrderedDict()
@@ -43,6 +44,10 @@ class BaseInputReader(ABC):
             relation_type = RelationType(key, i + 1, v['short'], v['verbose'], v['symmetric'])
             self._relation_types[key] = relation_type
             self._idx2relation_type[i + 1] = relation_type
+
+        self._neg_entity_count = neg_entity_count
+        self._neg_rel_count = neg_rel_count
+        self._max_span_size = max_span_size
 
         self._datasets = dict()
 
@@ -122,12 +127,14 @@ class BaseInputReader(ABC):
 
 
 class JsonInputReader(BaseInputReader):
-    def __init__(self, types_path: str, tokenizer: BertTokenizer, logger: Logger = None):
-        super().__init__(types_path, tokenizer, logger)
+    def __init__(self, types_path: str, tokenizer: BertTokenizer, neg_entity_count: int = None,
+                 neg_rel_count: int = None, max_span_size: int = None, logger: Logger = None):
+        super().__init__(types_path, tokenizer, neg_entity_count, neg_rel_count, max_span_size, logger)
 
     def read(self, dataset_paths):
         for dataset_label, dataset_path in dataset_paths.items():
-            dataset = Dataset(dataset_label, self)
+            dataset = Dataset(dataset_label, self._relation_types, self._entity_types, self._neg_entity_count,
+                              self._neg_rel_count, self._max_span_size)
             self._parse_dataset(dataset_path, dataset)
             self._datasets[dataset_label] = dataset
 

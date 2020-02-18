@@ -6,16 +6,18 @@ import torch
 from torch.nn import DataParallel
 from torch.optim import Optimizer
 import transformers
+from torch.utils.data import DataLoader
 from transformers import AdamW
 from transformers import BertTokenizer
 
 from spert import models
+from spert import sampling
+from spert import util
 from spert.entities import Dataset
 from spert.evaluator import Evaluator
 from spert.input_reader import JsonInputReader, BaseInputReader
 from spert.loss import SpERTLoss, Loss
 from tqdm import tqdm
-from spert.sampling import Sampler
 from spert.trainer import BaseTrainer
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -35,9 +37,6 @@ class SpERTTrainer(BaseTrainer):
         # path to export relation extraction examples to
         self._examples_path = os.path.join(self._log_path, 'examples_%s_%s_epoch_%s.html')
 
-        # sampler (create and batch training/evaluation samples)
-        self._sampler = Sampler(processes=args.sampling_processes, limit=args.sampling_limit)
-
     def train(self, train_path: str, valid_path: str, types_path: str, input_reader_cls: BaseInputReader):
         args = self.args
         train_label, valid_label = 'train', 'valid'
@@ -50,7 +49,8 @@ class SpERTTrainer(BaseTrainer):
         self._init_eval_logging(valid_label)
 
         # read datasets
-        input_reader = input_reader_cls(types_path, self._tokenizer, self._logger)
+        input_reader = input_reader_cls(types_path, self._tokenizer, args.neg_entity_count,
+                                        args.neg_relation_count, args.max_span_size, self._logger)
         input_reader.read({train_label: train_path, valid_label: valid_path})
         self._log_datasets(input_reader)
 
@@ -107,8 +107,7 @@ class SpERTTrainer(BaseTrainer):
         # train
         for epoch in range(args.epochs):
             # train epoch
-            self._train_epoch(model, compute_loss, optimizer, train_dataset, updates_epoch, epoch,
-                              input_reader.context_size, input_reader.relation_type_count)
+            self._train_epoch(model, compute_loss, optimizer, train_dataset, updates_epoch, epoch)
 
             # eval validation sets
             if not args.final_eval or (epoch == args.epochs - 1):
@@ -124,8 +123,6 @@ class SpERTTrainer(BaseTrainer):
         self._logger.info("Logged in: %s" % self._log_path)
         self._logger.info("Saved in: %s" % self._save_path)
 
-        self._sampler.join()
-
     def eval(self, dataset_path: str, types_path: str, input_reader_cls: BaseInputReader):
         args = self.args
         dataset_label = 'test'
@@ -137,7 +134,8 @@ class SpERTTrainer(BaseTrainer):
         self._init_eval_logging(dataset_label)
 
         # read datasets
-        input_reader = input_reader_cls(types_path, self._tokenizer, self._logger)
+        input_reader = input_reader_cls(types_path, self._tokenizer,
+                                        max_span_size=args.max_span_size, logger=self._logger)
         input_reader.read({dataset_label: dataset_path})
         self._log_datasets(input_reader)
 
@@ -163,39 +161,33 @@ class SpERTTrainer(BaseTrainer):
         self._eval(model, input_reader.get_dataset(dataset_label), input_reader)
         self._logger.info("Logged in: %s" % self._log_path)
 
-        self._sampler.join()
-
     def _train_epoch(self, model: torch.nn.Module, compute_loss: Loss, optimizer: Optimizer, dataset: Dataset,
-                     updates_epoch: int, epoch: int, context_size: int, rel_type_count: int):
+                     updates_epoch: int, epoch: int):
         self._logger.info("Train epoch: %s" % epoch)
 
-        # randomly shuffle data
-        order = torch.randperm(dataset.document_count)
-        sampler = self._sampler.create_train_sampler(dataset, self.args.train_batch_size, self.args.max_span_size,
-                                                     context_size, self.args.neg_entity_count,
-                                                     self.args.neg_relation_count, order=order, truncate=True)
+        # create data loader
+        dataset.switch_mode(Dataset.TRAIN_MODE)
+        data_loader = DataLoader(dataset, batch_size=self.args.train_batch_size, shuffle=True, drop_last=True,
+                                 num_workers=self.args.sampling_processes, collate_fn=sampling.collate_fn_padding)
 
         model.zero_grad()
 
         iteration = 0
         total = dataset.document_count // self.args.train_batch_size
-        for batch in tqdm(sampler, total=total, desc='Train epoch %s' % epoch):
+        for batch in tqdm(data_loader, total=total, desc='Train epoch %s' % epoch):
             model.train()
-            batch = batch.to(self._device)
-
-            # relation types to one-hot encoding
-            rel_types_onehot = torch.zeros([batch.rel_types.shape[0], batch.rel_types.shape[1],
-                                            rel_type_count], dtype=torch.float32).to(self._device)
-            rel_types_onehot.scatter_(2, batch.rel_types.unsqueeze(2), 1)
-            rel_types_onehot = rel_types_onehot[:, :, 1:]  # all zeros for 'none' relation
+            batch = util.to_device(batch, self._device)
 
             # forward step
-            entity_logits, rel_logits = model(batch.encodings, batch.ctx_masks, batch.entity_masks,
-                                              batch.entity_sizes, batch.rels, batch.rel_masks)
+            entity_logits, rel_logits = model(encodings=batch['encodings'], context_masks=batch['context_masks'],
+                                              entity_masks=batch['entity_masks'], entity_sizes=batch['entity_sizes'],
+                                              relations=batch['rels'], rel_masks=batch['rel_masks'])
 
             # compute loss and optimize parameters
-            batch_loss = compute_loss.compute(rel_logits, rel_types_onehot, entity_logits,
-                                              batch.entity_types, batch.rel_sample_masks, batch.entity_sample_masks)
+            batch_loss = compute_loss.compute(entity_logits=entity_logits, rel_logits=rel_logits,
+                                              rel_types=batch['rel_types'], entity_types=batch['entity_types'],
+                                              entity_sample_masks=batch['entity_sample_masks'],
+                                              rel_sample_masks=batch['rel_sample_masks'])
 
             # logging
             iteration += 1
@@ -219,23 +211,26 @@ class SpERTTrainer(BaseTrainer):
                               self.args.rel_filter_threshold, self.args.example_count,
                               self._examples_path, epoch, dataset.label)
 
-        # create batch sampler
-        sampler = self._sampler.create_eval_sampler(dataset, self.args.eval_batch_size, self.args.max_span_size,
-                                                    input_reader.context_size, truncate=False)
+        # create data loader
+        dataset.switch_mode(Dataset.EVAL_MODE)
+        data_loader = DataLoader(dataset, batch_size=self.args.eval_batch_size, shuffle=False, drop_last=False,
+                                 num_workers=self.args.sampling_processes, collate_fn=sampling.collate_fn_padding)
 
         with torch.no_grad():
             model.eval()
 
             # iterate batches
             total = math.ceil(dataset.document_count / self.args.eval_batch_size)
-            for batch in tqdm(sampler, total=total, desc='Evaluate epoch %s' % epoch):
+            for batch in tqdm(data_loader, total=total, desc='Evaluate epoch %s' % epoch):
                 # move batch to selected device
-                batch = batch.to(self._device)
+                batch = util.to_device(batch, self._device)
 
                 # run model (forward pass)
-                entity_clf, rel_clf, rels = model(batch.encodings, batch.ctx_masks, batch.entity_masks,
-                                                  batch.entity_sizes, batch.entity_spans, batch.entity_sample_masks,
-                                                  evaluate=True)
+                result = model(encodings=batch['encodings'], context_masks=batch['context_masks'],
+                               entity_masks=batch['entity_masks'], entity_sizes=batch['entity_sizes'],
+                               entity_spans=batch['entity_spans'], entity_sample_masks=batch['entity_sample_masks'],
+                               evaluate=True)
+                entity_clf, rel_clf, rels = result
 
                 # evaluate batch
                 evaluator.eval_batch(entity_clf, rel_clf, rels, batch)

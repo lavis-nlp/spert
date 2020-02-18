@@ -1,5 +1,8 @@
 from collections import OrderedDict
 from typing import List
+from torch.utils.data import Dataset as TorchDataset
+
+from spert import sampling
 
 
 class RelationType:
@@ -327,10 +330,19 @@ class BatchIterator:
             return entities
 
 
-class Dataset:
-    def __init__(self, label, input_reader):
+class Dataset(TorchDataset):
+    TRAIN_MODE = 'train'
+    EVAL_MODE = 'eval'
+
+    def __init__(self, label, rel_types, entity_types, neg_entity_count,
+                 neg_rel_count, max_span_size):
         self._label = label
-        self._input_reader = input_reader
+        self._rel_types = rel_types
+        self._entity_types = entity_types
+        self._neg_entity_count = neg_entity_count
+        self._neg_rel_count = neg_rel_count
+        self._max_span_size = max_span_size
+        self._mode = Dataset.TRAIN_MODE
 
         self._documents = OrderedDict()
         self._entities = OrderedDict()
@@ -371,6 +383,21 @@ class Dataset:
         self._relations[self._rid] = relation
         self._rid += 1
         return relation
+
+    def __len__(self):
+        return len(self._documents)
+
+    def __getitem__(self, index: int):
+        doc = self._documents[index]
+
+        if self._mode == Dataset.TRAIN_MODE:
+            return sampling.create_train_sample(doc, self._neg_entity_count, self._neg_rel_count,
+                                                self._max_span_size, len(self._rel_types))
+        else:
+            return sampling.create_eval_sample(doc, self._max_span_size)
+
+    def switch_mode(self, mode):
+        self._mode = mode
 
     @property
     def label(self):
