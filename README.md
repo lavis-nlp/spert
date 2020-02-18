@@ -42,6 +42,8 @@ python ./spert.py train --config configs/example_train.conf
 ## Notes
 - To train SpERT with SciBERT \[5\] download SciBERT from https://github.com/allenai/scibert (under "PyTorch HuggingFace Models") and set "model_path" and "tokenizer_path" in the config file to point to the SciBERT directory.
 - You can call "python ./spert.py train --help" or "python ./spert.py eval --help" for a description of training/evaluation arguments.
+- Please cite our paper when you use SpERT: <br/>
+Markus Eberts, Adrian Ulges. Span-based Joint Entity and Relation Extraction with Transformer Pre-training. 24th European Conference on Artificial Intelligence, 2020.
 
 ## References
 ```
