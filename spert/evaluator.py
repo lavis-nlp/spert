@@ -1,3 +1,4 @@
+import json
 import os
 import warnings
 from typing import List, Tuple, Dict
@@ -6,6 +7,7 @@ import torch
 from sklearn.metrics import precision_recall_fscore_support as prfs
 from transformers import BertTokenizer
 
+from spert import util
 from spert.entities import Document, Dataset, EntityType
 from spert.input_reader import JsonInputReader
 from spert.opt import jinja2
@@ -15,7 +17,7 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class Evaluator:
     def __init__(self, dataset: Dataset, input_reader: JsonInputReader, text_encoder: BertTokenizer,
-                 rel_filter_threshold: float, example_count: int, example_path: str,
+                 rel_filter_threshold: float, predictions_path: str, examples_path: str, example_count: int,
                  epoch: int, dataset_label: str):
         self._text_encoder = text_encoder
         self._input_reader = input_reader
@@ -25,8 +27,10 @@ class Evaluator:
         self._epoch = epoch
         self._dataset_label = dataset_label
 
+        self._predictions_path = predictions_path
+
+        self._examples_path = examples_path
         self._example_count = example_count
-        self._examples_path = example_path
 
         # relations
         self._gt_relations = []  # ground truth
@@ -123,6 +127,55 @@ class Evaluator:
         rel_nec_eval = self._score(gt, pred, print_results=True)
 
         return ner_eval, rel_eval, rel_nec_eval
+
+    def store_predictions(self):
+        predictions = []
+
+        for i, doc in enumerate(self._dataset.documents):
+            tokens = doc.tokens
+            pred_entities = self._pred_entities[i]
+            pred_relations = self._pred_relations[i]
+
+            # convert entities
+            converted_entities = []
+            for entity in pred_entities:
+                entity_span = entity[:2]
+                span_tokens = util.get_span_tokens(tokens, entity_span)
+                entity_type = entity[2].identifier
+                converted_entity = dict(type=entity_type, start=span_tokens[0].index, end=span_tokens[-1].index + 1)
+                converted_entities.append(converted_entity)
+            converted_entities = sorted(converted_entities, key=lambda e: e['start'])
+
+            # convert relations
+            converted_relations = []
+            for relation in pred_relations:
+                head, tail = relation[:2]
+                head_span, head_type = head[:2], head[2].identifier
+                tail_span, tail_type = tail[:2], tail[2].identifier
+                head_span_tokens = util.get_span_tokens(tokens, head_span)
+                tail_span_tokens = util.get_span_tokens(tokens, tail_span)
+                relation_type = relation[2].identifier
+
+                converted_head = dict(type=head_type, start=head_span_tokens[0].index,
+                                      end=head_span_tokens[-1].index + 1)
+                converted_tail = dict(type=tail_type, start=tail_span_tokens[0].index,
+                                      end=tail_span_tokens[-1].index + 1)
+
+                head_idx = converted_entities.index(converted_head)
+                tail_idx = converted_entities.index(converted_tail)
+
+                converted_relation = dict(type=relation_type, head=head_idx, tail=tail_idx)
+                converted_relations.append(converted_relation)
+            converted_relations = sorted(converted_relations, key=lambda r: r['head'])
+
+            doc_predictions = dict(tokens=[t.phrase for t in tokens], entities=converted_entities,
+                                   relations=converted_relations)
+            predictions.append(doc_predictions)
+
+        # store as json
+        label, epoch = self._dataset_label, self._epoch
+        with open(self._predictions_path % (label, epoch), 'w') as predictions_file:
+            json.dump(predictions, predictions_file)
 
     def store_examples(self):
         if jinja2 is None:
@@ -437,7 +490,7 @@ class Evaluator:
         ctx_after = self._text_encoder.decode(segments[4])
 
         html = (ctx_before + e1_tag + e1 + '</span> '
-                     + ctx_between + e2_tag + e2 + '</span> ' + ctx_after)
+                + ctx_between + e2_tag + e2 + '</span> ' + ctx_after)
         html = self._prettify(html)
 
         return html

@@ -7,6 +7,8 @@ import shutil
 import numpy as np
 import torch
 
+from spert.entities import TokenSpan
+
 CSV_DELIMETER = ';'
 
 
@@ -181,6 +183,23 @@ def padded_nonzero(tensor, padding=0):
 
 def swap(v1, v2):
     return v2, v1
+
+
+def get_span_tokens(tokens, span):
+    inside = False
+    span_tokens = []
+
+    for t in tokens:
+        if t.span[0] == span[0]:
+            inside = True
+
+        if inside:
+            span_tokens.append(t)
+
+        if inside and t.span[1] == span[1]:
+            return TokenSpan(span_tokens)
+
+    return None
 
 
 def to_device(batch, device):

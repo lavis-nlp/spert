@@ -19,7 +19,9 @@ def _add_common_args(arg_parser):
     # Logging
     arg_parser.add_argument('--label', type=str, help="Label of run. Used as the directory name of logs/models")
     arg_parser.add_argument('--log_path', type=str, help="Path do directory where training/evaluation logs are stored")
-    arg_parser.add_argument('--store_examples', action='store_true',
+    arg_parser.add_argument('--store_predictions', action='store_true', default=False,
+                            help="If true, store predictions on disc (in log directory)")
+    arg_parser.add_argument('--store_examples', action='store_true', default=False,
                             help="If true, store evaluation examples on disc (in log directory)")
     arg_parser.add_argument('--example_count', type=int, default=None,
                             help="Count of evaluation example to store (if store_examples == True)")
