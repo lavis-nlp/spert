@@ -9,6 +9,7 @@ import torch
 from torch.nn import DataParallel
 from torch.optim import Optimizer
 from transformers import PreTrainedModel
+from transformers import PreTrainedTokenizer
 
 from spert import util
 from spert.opt import tensorboardX
@@ -91,16 +92,18 @@ class BaseTrainer:
         logs = self._log_paths[dataset_label]
         util.append_csv(logs[data_label], *data)
 
-    def _save_best(self, model, optimizer, accuracy, iteration, label, extra=None):
+    def _save_best(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, optimizer: Optimizer,
+                   accuracy: float, iteration: int, label: str, extra=None):
         if accuracy > self._best_results[label]:
             self._logger.info("[%s] Best model in iteration %s: %s%% accuracy" % (label, iteration, accuracy))
-            self._save_model(self._save_path, model, iteration,
+            self._save_model(self._save_path, model, tokenizer, iteration,
                              optimizer=optimizer if self.args.save_optimizer else None,
                              save_as_best=True, name='model_%s' % label, extra=extra)
             self._best_results[label] = accuracy
 
-    def _save_model(self, save_path: str, model: PreTrainedModel, iteration: int, optimizer: Optimizer = None,
-                    save_as_best: bool = False, extra: dict = None, include_iteration: int = True, name: str = 'model'):
+    def _save_model(self, save_path: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer,
+                    iteration: int, optimizer: Optimizer = None, save_as_best: bool = False,
+                    extra: dict = None, include_iteration: int = True, name: str = 'model'):
         extra_state = dict(iteration=iteration)
 
         if optimizer:
@@ -117,10 +120,16 @@ class BaseTrainer:
 
         util.create_directories_dir(dir_path)
 
+        # save model
         if isinstance(model, DataParallel):
             model.module.save_pretrained(dir_path)
         else:
             model.save_pretrained(dir_path)
+
+        # save vocabulary
+        tokenizer.save_pretrained(dir_path)
+
+        # save extra
         state_path = os.path.join(dir_path, 'extra.state')
         torch.save(extra_state, state_path)
 

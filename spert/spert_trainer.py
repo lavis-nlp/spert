@@ -116,7 +116,7 @@ class SpERTTrainer(BaseTrainer):
         # save final model
         extra = dict(epoch=args.epochs, updates_epoch=updates_epoch, epoch_iteration=0)
         global_iteration = args.epochs * updates_epoch
-        self._save_model(self._save_path, model, global_iteration,
+        self._save_model(self._save_path, model, self._tokenizer, global_iteration,
                          optimizer=optimizer if self.args.save_optimizer else None, extra=extra,
                          include_iteration=False, name='final_model')
 
