@@ -125,6 +125,7 @@ class SpERTTrainer(BaseTrainer):
 
         self._logger.info("Logged in: %s" % self._log_path)
         self._logger.info("Saved in: %s" % self._save_path)
+        self._summary_writer.close()
 
     def eval(self, dataset_path: str, types_path: str, input_reader_cls: BaseInputReader):
         args = self.args
@@ -162,7 +163,9 @@ class SpERTTrainer(BaseTrainer):
 
         # evaluate
         self._eval(model, input_reader.get_dataset(dataset_label), input_reader)
+
         self._logger.info("Logged in: %s" % self._log_path)
+        self._summary_writer.close()
 
     def _train_epoch(self, model: torch.nn.Module, compute_loss: Loss, optimizer: Optimizer, dataset: Dataset,
                      updates_epoch: int, epoch: int):
