@@ -208,3 +208,18 @@ def to_device(batch, device):
         converted_batch[key] = batch[key].to(device)
 
     return converted_batch
+
+
+def check_version(config, model_class, model_path):
+    if os.path.exists(model_path):
+        model_path = model_path if model_path.endswith('.bin') else os.path.join(model_path, 'pytorch_model.bin')
+        state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+        config_dict = config.to_dict()
+
+        # version check
+        loaded_version = config_dict.get('spert_version', '1.0')
+        if 'rel_classifier.weight' in state_dict and loaded_version != model_class.VERSION:
+            msg = ("Current SpERT version (%s) does not match the version of the loaded model (%s). "
+                   % (model_class.VERSION, loaded_version))
+            msg += "Use the code matching your version or train a new model."
+            raise Exception(msg)

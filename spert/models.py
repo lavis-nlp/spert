@@ -24,6 +24,8 @@ def get_token(h: torch.tensor, x: torch.tensor, token: int):
 class SpERT(BertPreTrainedModel):
     """ Span-based model to jointly extract entities and relations """
 
+    VERSION = '1.1'
+
     def __init__(self, config: BertConfig, cls_token: int, relation_types: int, entity_types: int,
                  size_embedding: int, prop_drop: float, freeze_transformer: bool, max_pairs: int = 100):
         super(SpERT, self).__init__(config)
@@ -58,7 +60,6 @@ class SpERT(BertPreTrainedModel):
         context_masks = context_masks.float()
         h = self.bert(input_ids=encodings, attention_mask=context_masks)[0]
 
-        entity_masks = entity_masks.float()
         batch_size = encodings.shape[0]
 
         # classify entities
@@ -66,7 +67,6 @@ class SpERT(BertPreTrainedModel):
         entity_clf, entity_spans_pool = self._classify_entities(encodings, h, entity_masks, size_embeddings)
 
         # classify relations
-        rel_masks = rel_masks.float().unsqueeze(-1)
         h_large = h.unsqueeze(1).repeat(1, max(min(relations.shape[1], self._max_pairs), 1), 1, 1)
         rel_clf = torch.zeros([batch_size, relations.shape[1], self._relation_types]).to(
             self.rel_classifier.weight.device)
@@ -87,7 +87,6 @@ class SpERT(BertPreTrainedModel):
         context_masks = context_masks.float()
         h = self.bert(input_ids=encodings, attention_mask=context_masks)[0]
 
-        entity_masks = entity_masks.float()
         batch_size = encodings.shape[0]
         ctx_size = context_masks.shape[-1]
 
@@ -98,8 +97,8 @@ class SpERT(BertPreTrainedModel):
         # ignore entity candidates that do not constitute an actual entity for relations (based on classifier)
         relations, rel_masks, rel_sample_masks = self._filter_spans(entity_clf, entity_spans,
                                                                     entity_sample_masks, ctx_size)
-        rel_masks = rel_masks.float()
-        rel_sample_masks = rel_sample_masks.float()
+
+        rel_sample_masks = rel_sample_masks.float().unsqueeze(-1)
         h_large = h.unsqueeze(1).repeat(1, max(min(relations.shape[1], self._max_pairs), 1), 1, 1)
         rel_clf = torch.zeros([batch_size, relations.shape[1], self._relation_types]).to(
             self.rel_classifier.weight.device)
@@ -123,7 +122,8 @@ class SpERT(BertPreTrainedModel):
 
     def _classify_entities(self, encodings, h, entity_masks, size_embeddings):
         # max pool entity candidate spans
-        entity_spans_pool = entity_masks.unsqueeze(-1) * h.unsqueeze(1).repeat(1, entity_masks.shape[1], 1, 1)
+        m = (entity_masks.unsqueeze(-1) == 0).float() * (-1e30)
+        entity_spans_pool = m + h.unsqueeze(1).repeat(1, entity_masks.shape[1], 1, 1)
         entity_spans_pool = entity_spans_pool.max(dim=2)[0]
 
         # get cls token as candidate context representation
@@ -157,8 +157,13 @@ class SpERT(BertPreTrainedModel):
         size_pair_embeddings = size_pair_embeddings.view(batch_size, size_pair_embeddings.shape[1], -1)
 
         # relation context (context between entity candidate pair)
-        rel_ctx = rel_masks * h
+        # mask non entity candidate tokens
+        m = ((rel_masks == 0).float() * (-1e30)).unsqueeze(-1)
+        rel_ctx = m + h
+        # max pooling
         rel_ctx = rel_ctx.max(dim=2)[0]
+        # set the context vector of neighboring or adjacent entity candidates to zero
+        rel_ctx[rel_masks.to(torch.uint8).any(-1) == 0] = 0
 
         # create relation candidate representations including context, max pooled entity candidate pairs
         # and corresponding size embeddings
@@ -208,8 +213,8 @@ class SpERT(BertPreTrainedModel):
         # stack
         device = self.rel_classifier.weight.device
         batch_relations = util.padded_stack(batch_relations).to(device)
-        batch_rel_masks = util.padded_stack(batch_rel_masks).to(device).unsqueeze(-1)
-        batch_rel_sample_masks = util.padded_stack(batch_rel_sample_masks).to(device).unsqueeze(-1)
+        batch_rel_masks = util.padded_stack(batch_rel_masks).to(device)
+        batch_rel_sample_masks = util.padded_stack(batch_rel_sample_masks).to(device)
 
         return batch_relations, batch_rel_masks, batch_rel_sample_masks
 

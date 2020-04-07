@@ -139,3 +139,7 @@ class BaseTrainer:
             lr_scheduled = group['lr']
             lrs.append(lr_scheduled)
         return lrs
+
+    def _close_summary_writer(self):
+        if self._summary_writer is not None:
+            self._summary_writer.close()
