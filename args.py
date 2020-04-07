@@ -39,6 +39,8 @@ def _add_common_args(arg_parser):
     arg_parser.add_argument('--size_embedding', type=int, default=25, help="Dimensionality of size embedding")
     arg_parser.add_argument('--prop_drop', type=float, default=0.1, help="Probability of dropout used in SpERT")
     arg_parser.add_argument('--freeze_transformer', action='store_true', default=False, help="Freeze BERT weights")
+    arg_parser.add_argument('--no_overlapping', action='store_true', default=False,
+                            help="Do not evaluate on overlapping entities and relations with overlapping entities")
 
     # Misc
     arg_parser.add_argument('--seed', type=int, default=None, help="Seed")

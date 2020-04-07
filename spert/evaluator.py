@@ -17,12 +17,13 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class Evaluator:
     def __init__(self, dataset: Dataset, input_reader: JsonInputReader, text_encoder: BertTokenizer,
-                 rel_filter_threshold: float, predictions_path: str, examples_path: str, example_count: int,
-                 epoch: int, dataset_label: str):
+                 rel_filter_threshold: float, no_overlapping: bool,
+                 predictions_path: str, examples_path: str, example_count: int, epoch: int, dataset_label: str):
         self._text_encoder = text_encoder
         self._input_reader = input_reader
         self._dataset = dataset
         self._rel_filter_threshold = rel_filter_threshold
+        self._no_overlapping = no_overlapping
 
         self._epoch = epoch
         self._dataset_label = dataset_label
@@ -85,7 +86,6 @@ class Evaluator:
             # convert predicted relations for evaluation
             sample_pred_relations = self._convert_pred_relations(rel_types, rel_entity_spans,
                                                                  rel_entity_types, rel_scores)
-            self._pred_relations.append(sample_pred_relations)
 
             # get entities that are not classified as 'None'
             valid_entity_indices = entity_types.nonzero().view(-1)
@@ -96,7 +96,13 @@ class Evaluator:
 
             sample_pred_entities = self._convert_pred_entities(valid_entity_types, valid_entity_spans,
                                                                valid_entity_scores)
+
+            if self._no_overlapping:
+                sample_pred_entities, sample_pred_relations = self._remove_overlapping(sample_pred_entities,
+                                                                                       sample_pred_relations)
+
             self._pred_entities.append(sample_pred_entities)
+            self._pred_relations.append(sample_pred_relations)
 
     def compute_scores(self):
         print("Evaluation")
@@ -242,11 +248,15 @@ class Evaluator:
             gt_entities = doc.entities
 
             # convert ground truth relations and entities for precision/recall/f1 evaluation
-            sample_gt_relations = [rel.as_tuple() for rel in gt_relations]
             sample_gt_entities = [entity.as_tuple() for entity in gt_entities]
+            sample_gt_relations = [rel.as_tuple() for rel in gt_relations]
 
-            self._gt_relations.append(sample_gt_relations)
+            if self._no_overlapping:
+                sample_gt_entities, sample_gt_relations = self._remove_overlapping(sample_gt_entities,
+                                                                                   sample_gt_relations)
+
             self._gt_entities.append(sample_gt_entities)
+            self._gt_relations.append(sample_gt_relations)
 
     def _convert_pred_entities(self, pred_types: torch.tensor, pred_spans: torch.tensor, pred_scores: torch.tensor):
         converted_preds = []
@@ -289,6 +299,34 @@ class Evaluator:
                 converted_rels.append(tuple(list(converted_rel) + [score]))
 
         return converted_rels
+
+    def _remove_overlapping(self, entities, relations):
+        non_overlapping_entities = []
+        non_overlapping_relations = []
+
+        for entity in entities:
+            if not self._is_overlapping(entity, entities):
+                non_overlapping_entities.append(entity)
+
+        for rel in relations:
+            e1, e2 = rel[0], rel[1]
+            if not self._check_overlap(e1, e2):
+                non_overlapping_relations.append(rel)
+
+        return non_overlapping_entities, non_overlapping_relations
+
+    def _is_overlapping(self, e1, entities):
+        for e2 in entities:
+            if self._check_overlap(e1, e2):
+                return True
+
+        return False
+
+    def _check_overlap(self, e1, e2):
+        if e1 == e2 or e1[1] <= e2[0] or e2[1] <= e1[0]:
+            return False
+        else:
+            return True
 
     def _adjust_rel(self, rel: Tuple):
         adjusted_rel = rel

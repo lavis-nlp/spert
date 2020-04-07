@@ -218,7 +218,7 @@ class SpERTTrainer(BaseTrainer):
 
         # create evaluator
         evaluator = Evaluator(dataset, input_reader, self._tokenizer,
-                              self.args.rel_filter_threshold, self._predictions_path,
+                              self.args.rel_filter_threshold, self.args.no_overlapping, self._predictions_path,
                               self._examples_path, self.args.example_count, epoch, dataset.label)
 
         # create data loader
@@ -250,7 +250,7 @@ class SpERTTrainer(BaseTrainer):
         self._log_eval(*ner_eval, *rel_eval, *rel_nec_eval,
                        epoch, iteration, global_iteration, dataset.label)
 
-        if self.args.store_predictions:
+        if self.args.store_predictions and not self.args.no_overlapping:
             evaluator.store_predictions()
 
         if self.args.store_examples:
