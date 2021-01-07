@@ -7,9 +7,9 @@ PyTorch code for SpERT: "Span-based Entity and Relation Transformer". For a desc
 ### Requirements
 - Required
   - Python 3.5+
-  - PyTorch 1.1.0+ (tested with version 1.3.1)
-  - transformers 2.2.0+ (tested with version 2.2.0)
-  - scikit-learn (tested with version 0.21.3)
+  - PyTorch (tested with version 1.4.0)
+  - transformers (+sentencepiece, e.g. with 'pip install transformers[sentencepiece]', tested with version 4.1.1)
+  - scikit-learn (tested with version 0.24.0)
   - tqdm (tested with version 4.19.5)
   - numpy (tested with version 1.17.4)
 - Optional
