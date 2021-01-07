@@ -84,7 +84,8 @@ class SpERTTrainer(BaseTrainer):
                                             max_pairs=self.args.max_pairs,
                                             prop_drop=self.args.prop_drop,
                                             size_embedding=self.args.size_embedding,
-                                            freeze_transformer=self.args.freeze_transformer)
+                                            freeze_transformer=self.args.freeze_transformer,
+                                            cache_dir=self.args.cache_path)
 
         # SpERT is currently optimized on a single GPU and not thoroughly tested in a multi GPU setup
         # If you still want to train SpERT on multiple GPUs, uncomment the following lines
@@ -161,7 +162,8 @@ class SpERTTrainer(BaseTrainer):
                                             max_pairs=self.args.max_pairs,
                                             prop_drop=self.args.prop_drop,
                                             size_embedding=self.args.size_embedding,
-                                            freeze_transformer=self.args.freeze_transformer)
+                                            freeze_transformer=self.args.freeze_transformer,
+                                            cache_dir=self.args.cache_path)
 
         model.to(self._device)
 
