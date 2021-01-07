@@ -10,7 +10,7 @@ PyTorch code for SpERT: "Span-based Entity and Relation Transformer". For a desc
   - PyTorch (tested with version 1.4.0)
   - transformers (+sentencepiece, e.g. with 'pip install transformers[sentencepiece]', tested with version 4.1.1)
   - scikit-learn (tested with version 0.24.0)
-  - tqdm (tested with version 4.19.5)
+  - tqdm (tested with version 4.55.1)
   - numpy (tested with version 1.17.4)
 - Optional
   - jinja2 (tested with version 2.10.3) - if installed, used to export relation extraction examples
