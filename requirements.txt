@@ -4,4 +4,5 @@ tensorboardX==1.6
 torch==1.4.0
 tqdm==4.55.1
 transformers==4.1.1
+transformers[sentencepiece]==0.1.91
 scikit-learn==0.24.0
