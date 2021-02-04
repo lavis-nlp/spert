@@ -30,17 +30,17 @@ bash ./scripts/fetch_models.sh
 The attached ADE model was trained on split "1" ("ade_split_1_train.json" / "ade_split_1_test.json") under "data/datasets/ade".
 
 ## Examples
-Train CoNLL04 on train dataset, evaluate on dev dataset:
+(1) Train CoNLL04 on train dataset, evaluate on dev dataset:
 ```
 python ./spert.py train --config configs/example_train.conf
 ```
 
-Evaluate the CoNLL04 model on test dataset:
+(2) Evaluate the CoNLL04 model on test dataset:
 ```
 python ./spert.py eval --config configs/example_eval.conf
 ```
 
-Use the CoNLL04 model for prediction. See the file 'data/datasets/conll04/conll04_prediction_example.json' for supported data formats. You have three options to specify the input sentences, choose the one that suits your needs. If the dataset contains raw sentences, 'spacy' must be installed for tokenization. Download a spacy model via 'python -m spacy download model_label' and set it as spacy_model in the configuration file (see 'configs/example_predict.conf'). 
+(3) Use the CoNLL04 model for prediction. See the file 'data/datasets/conll04/conll04_prediction_example.json' for supported data formats. You have three options to specify the input sentences, choose the one that suits your needs. If the dataset contains raw sentences, 'spacy' must be installed for tokenization. Download a spacy model via 'python -m spacy download model_label' and set it as spacy_model in the configuration file (see 'configs/example_predict.conf'). 
 ```
 python ./spert.py predict --config configs/example_predict.conf
 ```
