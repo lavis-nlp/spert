@@ -1,4 +1,4 @@
-import json
+import os
 import os
 import warnings
 from typing import List, Tuple, Dict
@@ -7,30 +7,27 @@ import torch
 from sklearn.metrics import precision_recall_fscore_support as prfs
 from transformers import BertTokenizer
 
-from spert import util
+from spert import prediction
 from spert.entities import Document, Dataset, EntityType
-from spert.input_reader import JsonInputReader
+from spert.input_reader import BaseInputReader
 from spert.opt import jinja2
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
 class Evaluator:
-    def __init__(self, dataset: Dataset, input_reader: JsonInputReader, text_encoder: BertTokenizer,
+    def __init__(self, dataset: Dataset, input_reader: BaseInputReader, text_encoder: BertTokenizer,
                  rel_filter_threshold: float, no_overlapping: bool,
-                 predictions_path: str, examples_path: str, example_count: int, epoch: int, dataset_label: str):
+                 predictions_path: str, examples_path: str, example_count: int):
         self._text_encoder = text_encoder
         self._input_reader = input_reader
         self._dataset = dataset
         self._rel_filter_threshold = rel_filter_threshold
         self._no_overlapping = no_overlapping
 
-        self._epoch = epoch
-        self._dataset_label = dataset_label
-
         self._predictions_path = predictions_path
-
         self._examples_path = examples_path
+
         self._example_count = example_count
 
         # relations
@@ -47,62 +44,14 @@ class Evaluator:
 
     def eval_batch(self, batch_entity_clf: torch.tensor, batch_rel_clf: torch.tensor,
                    batch_rels: torch.tensor, batch: dict):
-        batch_size = batch_rel_clf.shape[0]
-        rel_class_count = batch_rel_clf.shape[2]
+        batch_pred_entities, batch_pred_relations = prediction.convert_predictions(batch_entity_clf, batch_rel_clf,
+                                                                                   batch_rels, batch,
+                                                                                   self._rel_filter_threshold,
+                                                                                   self._input_reader,
+                                                                                   no_overlapping=self._no_overlapping)
 
-        # get maximum activation (index of predicted entity type)
-        batch_entity_types = batch_entity_clf.argmax(dim=-1)
-        # apply entity sample mask
-        batch_entity_types *= batch['entity_sample_masks'].long()
-
-        batch_rel_clf = batch_rel_clf.view(batch_size, -1)
-
-        # apply threshold to relations
-        if self._rel_filter_threshold > 0:
-            batch_rel_clf[batch_rel_clf < self._rel_filter_threshold] = 0
-
-        for i in range(batch_size):
-            # get model predictions for sample
-            rel_clf = batch_rel_clf[i]
-            entity_types = batch_entity_types[i]
-
-            # get predicted relation labels and corresponding entity pairs
-            rel_nonzero = rel_clf.nonzero().view(-1)
-            rel_scores = rel_clf[rel_nonzero]
-
-            rel_types = (rel_nonzero % rel_class_count) + 1  # model does not predict None class (+1)
-            rel_indices = rel_nonzero // rel_class_count
-
-            rels = batch_rels[i][rel_indices]
-
-            # get masks of entities in relation
-            rel_entity_spans = batch['entity_spans'][i][rels].long()
-
-            # get predicted entity types
-            rel_entity_types = torch.zeros([rels.shape[0], 2])
-            if rels.shape[0] != 0:
-                rel_entity_types = torch.stack([entity_types[rels[j]] for j in range(rels.shape[0])])
-
-            # convert predicted relations for evaluation
-            sample_pred_relations = self._convert_pred_relations(rel_types, rel_entity_spans,
-                                                                 rel_entity_types, rel_scores)
-
-            # get entities that are not classified as 'None'
-            valid_entity_indices = entity_types.nonzero().view(-1)
-            valid_entity_types = entity_types[valid_entity_indices]
-            valid_entity_spans = batch['entity_spans'][i][valid_entity_indices]
-            valid_entity_scores = torch.gather(batch_entity_clf[i][valid_entity_indices], 1,
-                                               valid_entity_types.unsqueeze(1)).view(-1)
-
-            sample_pred_entities = self._convert_pred_entities(valid_entity_types, valid_entity_spans,
-                                                               valid_entity_scores)
-
-            if self._no_overlapping:
-                sample_pred_entities, sample_pred_relations = self._remove_overlapping(sample_pred_entities,
-                                                                                       sample_pred_relations)
-
-            self._pred_entities.append(sample_pred_entities)
-            self._pred_relations.append(sample_pred_relations)
+        self._pred_entities.extend(batch_pred_entities)
+        self._pred_relations.extend(batch_pred_relations)
 
     def compute_scores(self):
         print("Evaluation")
@@ -135,53 +84,8 @@ class Evaluator:
         return ner_eval, rel_eval, rel_nec_eval
 
     def store_predictions(self):
-        predictions = []
-
-        for i, doc in enumerate(self._dataset.documents):
-            tokens = doc.tokens
-            pred_entities = self._pred_entities[i]
-            pred_relations = self._pred_relations[i]
-
-            # convert entities
-            converted_entities = []
-            for entity in pred_entities:
-                entity_span = entity[:2]
-                span_tokens = util.get_span_tokens(tokens, entity_span)
-                entity_type = entity[2].identifier
-                converted_entity = dict(type=entity_type, start=span_tokens[0].index, end=span_tokens[-1].index + 1)
-                converted_entities.append(converted_entity)
-            converted_entities = sorted(converted_entities, key=lambda e: e['start'])
-
-            # convert relations
-            converted_relations = []
-            for relation in pred_relations:
-                head, tail = relation[:2]
-                head_span, head_type = head[:2], head[2].identifier
-                tail_span, tail_type = tail[:2], tail[2].identifier
-                head_span_tokens = util.get_span_tokens(tokens, head_span)
-                tail_span_tokens = util.get_span_tokens(tokens, tail_span)
-                relation_type = relation[2].identifier
-
-                converted_head = dict(type=head_type, start=head_span_tokens[0].index,
-                                      end=head_span_tokens[-1].index + 1)
-                converted_tail = dict(type=tail_type, start=tail_span_tokens[0].index,
-                                      end=tail_span_tokens[-1].index + 1)
-
-                head_idx = converted_entities.index(converted_head)
-                tail_idx = converted_entities.index(converted_tail)
-
-                converted_relation = dict(type=relation_type, head=head_idx, tail=tail_idx)
-                converted_relations.append(converted_relation)
-            converted_relations = sorted(converted_relations, key=lambda r: r['head'])
-
-            doc_predictions = dict(tokens=[t.phrase for t in tokens], entities=converted_entities,
-                                   relations=converted_relations)
-            predictions.append(doc_predictions)
-
-        # store as json
-        label, epoch = self._dataset_label, self._epoch
-        with open(self._predictions_path % (label, epoch), 'w') as predictions_file:
-            json.dump(predictions, predictions_file)
+        prediction.store_predictions(self._dataset.documents, self._pred_entities,
+                                     self._pred_relations, self._predictions_path)
 
     def store_examples(self):
         if jinja2 is None:
@@ -209,37 +113,35 @@ class Evaluator:
                                                     include_entity_types=True, to_html=self._rel_to_html)
             rel_examples_nec.append(rel_example_nec)
 
-        label, epoch = self._dataset_label, self._epoch
-
         # entities
         self._store_examples(entity_examples[:self._example_count],
-                             file_path=self._examples_path % ('entities', label, epoch),
+                             file_path=self._examples_path % 'entities',
                              template='entity_examples.html')
 
         self._store_examples(sorted(entity_examples[:self._example_count],
                                     key=lambda k: k['length']),
-                             file_path=self._examples_path % ('entities_sorted', label, epoch),
+                             file_path=self._examples_path % 'entities_sorted',
                              template='entity_examples.html')
 
         # relations
         # without entity types
         self._store_examples(rel_examples[:self._example_count],
-                             file_path=self._examples_path % ('rel', label, epoch),
+                             file_path=self._examples_path % 'rel',
                              template='relation_examples.html')
 
         self._store_examples(sorted(rel_examples[:self._example_count],
                                     key=lambda k: k['length']),
-                             file_path=self._examples_path % ('rel_sorted', label, epoch),
+                             file_path=self._examples_path % 'rel_sorted',
                              template='relation_examples.html')
 
         # with entity types
         self._store_examples(rel_examples_nec[:self._example_count],
-                             file_path=self._examples_path % ('rel_nec', label, epoch),
+                             file_path=self._examples_path % 'rel_nec',
                              template='relation_examples.html')
 
         self._store_examples(sorted(rel_examples_nec[:self._example_count],
                                     key=lambda k: k['length']),
-                             file_path=self._examples_path % ('rel_nec_sorted', label, epoch),
+                             file_path=self._examples_path % 'rel_nec_sorted',
                              template='relation_examples.html')
 
     def _convert_gt(self, docs: List[Document]):
@@ -252,90 +154,11 @@ class Evaluator:
             sample_gt_relations = [rel.as_tuple() for rel in gt_relations]
 
             if self._no_overlapping:
-                sample_gt_entities, sample_gt_relations = self._remove_overlapping(sample_gt_entities,
-                                                                                   sample_gt_relations)
+                sample_gt_entities, sample_gt_relations = prediction.remove_overlapping(sample_gt_entities,
+                                                                                        sample_gt_relations)
 
             self._gt_entities.append(sample_gt_entities)
             self._gt_relations.append(sample_gt_relations)
-
-    def _convert_pred_entities(self, pred_types: torch.tensor, pred_spans: torch.tensor, pred_scores: torch.tensor):
-        converted_preds = []
-
-        for i in range(pred_types.shape[0]):
-            label_idx = pred_types[i].item()
-            entity_type = self._input_reader.get_entity_type(label_idx)
-
-            start, end = pred_spans[i].tolist()
-            score = pred_scores[i].item()
-
-            converted_pred = (start, end, entity_type, score)
-            converted_preds.append(converted_pred)
-
-        return converted_preds
-
-    def _convert_pred_relations(self, pred_rel_types: torch.tensor, pred_entity_spans: torch.tensor,
-                                pred_entity_types: torch.tensor, pred_scores: torch.tensor):
-        converted_rels = []
-        check = set()
-
-        for i in range(pred_rel_types.shape[0]):
-            label_idx = pred_rel_types[i].item()
-            pred_rel_type = self._input_reader.get_relation_type(label_idx)
-            pred_head_type_idx, pred_tail_type_idx = pred_entity_types[i][0].item(), pred_entity_types[i][1].item()
-            pred_head_type = self._input_reader.get_entity_type(pred_head_type_idx)
-            pred_tail_type = self._input_reader.get_entity_type(pred_tail_type_idx)
-            score = pred_scores[i].item()
-
-            spans = pred_entity_spans[i]
-            head_start, head_end = spans[0].tolist()
-            tail_start, tail_end = spans[1].tolist()
-
-            converted_rel = ((head_start, head_end, pred_head_type),
-                             (tail_start, tail_end, pred_tail_type), pred_rel_type)
-            converted_rel = self._adjust_rel(converted_rel)
-
-            if converted_rel not in check:
-                check.add(converted_rel)
-                converted_rels.append(tuple(list(converted_rel) + [score]))
-
-        return converted_rels
-
-    def _remove_overlapping(self, entities, relations):
-        non_overlapping_entities = []
-        non_overlapping_relations = []
-
-        for entity in entities:
-            if not self._is_overlapping(entity, entities):
-                non_overlapping_entities.append(entity)
-
-        for rel in relations:
-            e1, e2 = rel[0], rel[1]
-            if not self._check_overlap(e1, e2):
-                non_overlapping_relations.append(rel)
-
-        return non_overlapping_entities, non_overlapping_relations
-
-    def _is_overlapping(self, e1, entities):
-        for e2 in entities:
-            if self._check_overlap(e1, e2):
-                return True
-
-        return False
-
-    def _check_overlap(self, e1, e2):
-        if e1 == e2 or e1[1] <= e2[0] or e2[1] <= e1[0]:
-            return False
-        else:
-            return True
-
-    def _adjust_rel(self, rel: Tuple):
-        adjusted_rel = rel
-        if rel[-1].symmetric:
-            head, tail = rel[:2]
-            if tail[0] < head[0]:
-                adjusted_rel = tail, head, rel[-1]
-
-        return adjusted_rel
 
     def _convert_by_setting(self, gt: List[List[Tuple]], pred: List[List[Tuple]],
                             include_entity_types: bool = True, include_score: bool = False):

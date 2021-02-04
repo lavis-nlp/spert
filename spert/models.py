@@ -81,8 +81,8 @@ class SpERT(BertPreTrainedModel):
 
         return entity_clf, rel_clf
 
-    def _forward_eval(self, encodings: torch.tensor, context_masks: torch.tensor, entity_masks: torch.tensor,
-                      entity_sizes: torch.tensor, entity_spans: torch.tensor, entity_sample_masks: torch.tensor):
+    def _forward_inference(self, encodings: torch.tensor, context_masks: torch.tensor, entity_masks: torch.tensor,
+                           entity_sizes: torch.tensor, entity_spans: torch.tensor, entity_sample_masks: torch.tensor):
         # get contextualized token embeddings from last transformer layer
         context_masks = context_masks.float()
         h = self.bert(input_ids=encodings, attention_mask=context_masks)['last_hidden_state']
@@ -218,11 +218,11 @@ class SpERT(BertPreTrainedModel):
 
         return batch_relations, batch_rel_masks, batch_rel_sample_masks
 
-    def forward(self, *args, evaluate=False, **kwargs):
-        if not evaluate:
+    def forward(self, *args, inference=False, **kwargs):
+        if not inference:
             return self._forward_train(*args, **kwargs)
         else:
-            return self._forward_eval(*args, **kwargs)
+            return self._forward_inference(*args, **kwargs)
 
 
 # Model access

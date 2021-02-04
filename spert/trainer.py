@@ -21,43 +21,46 @@ class BaseTrainer:
     """ Trainer base class with common methods """
 
     def __init__(self, args: argparse.Namespace):
-        self.args = args
-        self._debug = self.args.debug
+        self._args = args
+        self._debug = self._args.debug
 
-        # logging
-        name = str(datetime.datetime.now()).replace(' ', '_')
-        self._log_path = os.path.join(self.args.log_path, self.args.label, name)
-        util.create_directories_dir(self._log_path)
+        run_key = str(datetime.datetime.now()).replace(' ', '_')
 
         if hasattr(args, 'save_path'):
-            self._save_path = os.path.join(self.args.save_path, self.args.label, name)
+            self._save_path = os.path.join(self._args.save_path, self._args.label, run_key)
             util.create_directories_dir(self._save_path)
 
-        self._log_paths = dict()
+        # logging
+        if hasattr(args, 'log_path'):
+            self._log_path = os.path.join(self._args.log_path, self._args.label, run_key)
+            util.create_directories_dir(self._log_path)
 
-        # file + console logging
-        log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-        self._logger = logging.getLogger()
-        util.reset_logger(self._logger)
+            self._log_paths = dict()
 
-        file_handler = logging.FileHandler(os.path.join(self._log_path, 'all.log'))
-        file_handler.setFormatter(log_formatter)
-        self._logger.addHandler(file_handler)
+            # file + console logging
+            log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+            self._logger = logging.getLogger()
+            util.reset_logger(self._logger)
 
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(log_formatter)
-        self._logger.addHandler(console_handler)
+            file_handler = logging.FileHandler(os.path.join(self._log_path, 'all.log'))
+            file_handler.setFormatter(log_formatter)
+            self._logger.addHandler(file_handler)
 
-        if self._debug:
-            self._logger.setLevel(logging.DEBUG)
-        else:
-            self._logger.setLevel(logging.INFO)
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(log_formatter)
+            self._logger.addHandler(console_handler)
 
-        # tensorboard summary
-        self._summary_writer = tensorboardX.SummaryWriter(self._log_path) if tensorboardX is not None else None
+            if self._debug:
+                self._logger.setLevel(logging.DEBUG)
+            else:
+                self._logger.setLevel(logging.INFO)
+
+            # tensorboard summary
+            self._summary_writer = tensorboardX.SummaryWriter(self._log_path) if tensorboardX is not None else None
+
+            self._log_arguments()
 
         self._best_results = dict()
-        self._log_arguments()
 
         # CUDA devices
         self._device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
@@ -80,9 +83,9 @@ class BaseTrainer:
             self._best_results[label] = 0
 
     def _log_arguments(self):
-        util.save_dict(self._log_path, self.args, 'args')
+        util.save_dict(self._log_path, self._args, 'args')
         if self._summary_writer is not None:
-            util.summarize_dict(self._summary_writer, self.args, 'args')
+            util.summarize_dict(self._summary_writer, self._args, 'args')
 
     def _log_tensorboard(self, dataset_label: str, data_label: str, data: object, iteration: int):
         if self._summary_writer is not None:
@@ -97,7 +100,7 @@ class BaseTrainer:
         if accuracy > self._best_results[label]:
             self._logger.info("[%s] Best model in iteration %s: %s%% accuracy" % (label, iteration, accuracy))
             self._save_model(self._save_path, model, tokenizer, iteration,
-                             optimizer=optimizer if self.args.save_optimizer else None,
+                             optimizer=optimizer if self._args.save_optimizer else None,
                              save_as_best=True, name='model_%s' % label, extra=extra)
             self._best_results[label] = accuracy
 

@@ -1,6 +1,7 @@
 import argparse
 import math
 import os
+from typing import Type
 
 import torch
 from torch.nn import DataParallel
@@ -10,7 +11,7 @@ from torch.utils.data import DataLoader
 from transformers import AdamW, BertConfig
 from transformers import BertTokenizer
 
-from spert import models
+from spert import models, prediction
 from spert import sampling
 from spert import util
 from spert.entities import Dataset
@@ -34,14 +35,8 @@ class SpERTTrainer(BaseTrainer):
                                                         do_lower_case=args.lowercase,
                                                         cache_dir=args.cache_path)
 
-        # path to export predictions to
-        self._predictions_path = os.path.join(self._log_path, 'predictions_%s_epoch_%s.json')
-
-        # path to export relation extraction examples to
-        self._examples_path = os.path.join(self._log_path, 'examples_%s_%s_epoch_%s.html')
-
-    def train(self, train_path: str, valid_path: str, types_path: str, input_reader_cls: BaseInputReader):
-        args = self.args
+    def train(self, train_path: str, valid_path: str, types_path: str, input_reader_cls: Type[BaseInputReader]):
+        args = self._args
         train_label, valid_label = 'train', 'valid'
 
         self._logger.info("Datasets: %s, %s" % (train_path, valid_path))
@@ -54,38 +49,19 @@ class SpERTTrainer(BaseTrainer):
         # read datasets
         input_reader = input_reader_cls(types_path, self._tokenizer, args.neg_entity_count,
                                         args.neg_relation_count, args.max_span_size, self._logger)
-        input_reader.read({train_label: train_path, valid_label: valid_path})
+        train_dataset = input_reader.read(train_path, train_label)
+        validation_dataset = input_reader.read(valid_path, valid_label)
         self._log_datasets(input_reader)
 
-        train_dataset = input_reader.get_dataset(train_label)
         train_sample_count = train_dataset.document_count
         updates_epoch = train_sample_count // args.train_batch_size
         updates_total = updates_epoch * args.epochs
 
-        validation_dataset = input_reader.get_dataset(valid_label)
-
         self._logger.info("Updates per epoch: %s" % updates_epoch)
         self._logger.info("Updates total: %s" % updates_total)
 
-        # create model
-        model_class = models.get_model(self.args.model_type)
-
         # load model
-        config = BertConfig.from_pretrained(self.args.model_path, cache_dir=self.args.cache_path)
-        util.check_version(config, model_class, self.args.model_path)
-
-        config.spert_version = model_class.VERSION
-        model = model_class.from_pretrained(self.args.model_path,
-                                            config=config,
-                                            # SpERT model parameters
-                                            cls_token=self._tokenizer.convert_tokens_to_ids('[CLS]'),
-                                            relation_types=input_reader.relation_type_count - 1,
-                                            entity_types=input_reader.entity_type_count,
-                                            max_pairs=self.args.max_pairs,
-                                            prop_drop=self.args.prop_drop,
-                                            size_embedding=self.args.size_embedding,
-                                            freeze_transformer=self.args.freeze_transformer,
-                                            cache_dir=self.args.cache_path)
+        model = self._load_model(input_reader)
 
         # SpERT is currently optimized on a single GPU and not thoroughly tested in a multi GPU setup
         # If you still want to train SpERT on multiple GPUs, uncomment the following lines
@@ -124,15 +100,15 @@ class SpERTTrainer(BaseTrainer):
         extra = dict(epoch=args.epochs, updates_epoch=updates_epoch, epoch_iteration=0)
         global_iteration = args.epochs * updates_epoch
         self._save_model(self._save_path, model, self._tokenizer, global_iteration,
-                         optimizer=optimizer if self.args.save_optimizer else None, extra=extra,
+                         optimizer=optimizer if self._args.save_optimizer else None, extra=extra,
                          include_iteration=False, name='final_model')
 
         self._logger.info("Logged in: %s" % self._log_path)
         self._logger.info("Saved in: %s" % self._save_path)
         self._close_summary_writer()
 
-    def eval(self, dataset_path: str, types_path: str, input_reader_cls: BaseInputReader):
-        args = self.args
+    def eval(self, dataset_path: str, types_path: str, input_reader_cls: Type[BaseInputReader]):
+        args = self._args
         dataset_label = 'test'
 
         self._logger.info("Dataset: %s" % dataset_path)
@@ -144,34 +120,53 @@ class SpERTTrainer(BaseTrainer):
         # read datasets
         input_reader = input_reader_cls(types_path, self._tokenizer,
                                         max_span_size=args.max_span_size, logger=self._logger)
-        input_reader.read({dataset_label: dataset_path})
+        test_dataset = input_reader.read(dataset_path, dataset_label)
         self._log_datasets(input_reader)
 
-        # create model
-        model_class = models.get_model(self.args.model_type)
+        # load model
+        model = self._load_model(input_reader)
+        model.to(self._device)
 
-        config = BertConfig.from_pretrained(self.args.model_path, cache_dir=self.args.cache_path)
-        util.check_version(config, model_class, self.args.model_path)
+        # evaluate
+        self._eval(model, test_dataset, input_reader)
 
-        model = model_class.from_pretrained(self.args.model_path,
+        self._logger.info("Logged in: %s" % self._log_path)
+        self._close_summary_writer()
+
+    def predict(self, dataset_path: str, types_path: str, input_reader_cls: Type[BaseInputReader]):
+        args = self._args
+
+        # read datasets
+        input_reader = input_reader_cls(types_path, self._tokenizer,
+                                        max_span_size=args.max_span_size,
+                                        spacy_model=args.spacy_model)
+        dataset = input_reader.read(dataset_path, 'dataset')
+
+        model = self._load_model(input_reader)
+        model.to(self._device)
+
+        self._predict(model, dataset, input_reader)
+
+    def _load_model(self, input_reader):
+        model_class = models.get_model(self._args.model_type)
+
+        config = BertConfig.from_pretrained(self._args.model_path, cache_dir=self._args.cache_path)
+        util.check_version(config, model_class, self._args.model_path)
+
+        config.spert_version = model_class.VERSION
+        model = model_class.from_pretrained(self._args.model_path,
                                             config=config,
                                             # SpERT model parameters
                                             cls_token=self._tokenizer.convert_tokens_to_ids('[CLS]'),
                                             relation_types=input_reader.relation_type_count - 1,
                                             entity_types=input_reader.entity_type_count,
-                                            max_pairs=self.args.max_pairs,
-                                            prop_drop=self.args.prop_drop,
-                                            size_embedding=self.args.size_embedding,
-                                            freeze_transformer=self.args.freeze_transformer,
-                                            cache_dir=self.args.cache_path)
+                                            max_pairs=self._args.max_pairs,
+                                            prop_drop=self._args.prop_drop,
+                                            size_embedding=self._args.size_embedding,
+                                            freeze_transformer=self._args.freeze_transformer,
+                                            cache_dir=self._args.cache_path)
 
-        model.to(self._device)
-
-        # evaluate
-        self._eval(model, input_reader.get_dataset(dataset_label), input_reader)
-
-        self._logger.info("Logged in: %s" % self._log_path)
-        self._close_summary_writer()
+        return model
 
     def _train_epoch(self, model: torch.nn.Module, compute_loss: Loss, optimizer: Optimizer, dataset: Dataset,
                      updates_epoch: int, epoch: int):
@@ -179,13 +174,13 @@ class SpERTTrainer(BaseTrainer):
 
         # create data loader
         dataset.switch_mode(Dataset.TRAIN_MODE)
-        data_loader = DataLoader(dataset, batch_size=self.args.train_batch_size, shuffle=True, drop_last=True,
-                                 num_workers=self.args.sampling_processes, collate_fn=sampling.collate_fn_padding)
+        data_loader = DataLoader(dataset, batch_size=self._args.train_batch_size, shuffle=True, drop_last=True,
+                                 num_workers=self._args.sampling_processes, collate_fn=sampling.collate_fn_padding)
 
         model.zero_grad()
 
         iteration = 0
-        total = dataset.document_count // self.args.train_batch_size
+        total = dataset.document_count // self._args.train_batch_size
         for batch in tqdm(data_loader, total=total, desc='Train epoch %s' % epoch):
             model.train()
             batch = util.to_device(batch, self._device)
@@ -205,12 +200,12 @@ class SpERTTrainer(BaseTrainer):
             iteration += 1
             global_iteration = epoch * updates_epoch + iteration
 
-            if global_iteration % self.args.train_log_iter == 0:
+            if global_iteration % self._args.train_log_iter == 0:
                 self._log_train(optimizer, batch_loss, epoch, iteration, global_iteration, dataset.label)
 
         return iteration
 
-    def _eval(self, model: torch.nn.Module, dataset: Dataset, input_reader: JsonInputReader,
+    def _eval(self, model: torch.nn.Module, dataset: Dataset, input_reader: BaseInputReader,
               epoch: int = 0, updates_epoch: int = 0, iteration: int = 0):
         self._logger.info("Evaluate: %s" % dataset.label)
 
@@ -219,20 +214,22 @@ class SpERTTrainer(BaseTrainer):
             model = model.module
 
         # create evaluator
+        predictions_path = os.path.join(self._log_path, f'predictions_{dataset.label}_epoch_{epoch}.json')
+        examples_path = os.path.join(self._log_path, f'examples_%s_{dataset.label}_epoch_{epoch}.html')
         evaluator = Evaluator(dataset, input_reader, self._tokenizer,
-                              self.args.rel_filter_threshold, self.args.no_overlapping, self._predictions_path,
-                              self._examples_path, self.args.example_count, epoch, dataset.label)
+                              self._args.rel_filter_threshold, self._args.no_overlapping, predictions_path,
+                              examples_path, self._args.example_count)
 
         # create data loader
         dataset.switch_mode(Dataset.EVAL_MODE)
-        data_loader = DataLoader(dataset, batch_size=self.args.eval_batch_size, shuffle=False, drop_last=False,
-                                 num_workers=self.args.sampling_processes, collate_fn=sampling.collate_fn_padding)
+        data_loader = DataLoader(dataset, batch_size=self._args.eval_batch_size, shuffle=False, drop_last=False,
+                                 num_workers=self._args.sampling_processes, collate_fn=sampling.collate_fn_padding)
 
         with torch.no_grad():
             model.eval()
 
             # iterate batches
-            total = math.ceil(dataset.document_count / self.args.eval_batch_size)
+            total = math.ceil(dataset.document_count / self._args.eval_batch_size)
             for batch in tqdm(data_loader, total=total, desc='Evaluate epoch %s' % epoch):
                 # move batch to selected device
                 batch = util.to_device(batch, self._device)
@@ -241,7 +238,7 @@ class SpERTTrainer(BaseTrainer):
                 result = model(encodings=batch['encodings'], context_masks=batch['context_masks'],
                                entity_masks=batch['entity_masks'], entity_sizes=batch['entity_sizes'],
                                entity_spans=batch['entity_spans'], entity_sample_masks=batch['entity_sample_masks'],
-                               evaluate=True)
+                               inference=True)
                 entity_clf, rel_clf, rels = result
 
                 # evaluate batch
@@ -252,18 +249,54 @@ class SpERTTrainer(BaseTrainer):
         self._log_eval(*ner_eval, *rel_eval, *rel_nec_eval,
                        epoch, iteration, global_iteration, dataset.label)
 
-        if self.args.store_predictions and not self.args.no_overlapping:
+        if self._args.store_predictions and not self._args.no_overlapping:
             evaluator.store_predictions()
 
-        if self.args.store_examples:
+        if self._args.store_examples:
             evaluator.store_examples()
+
+    def _predict(self, model: torch.nn.Module, dataset: Dataset, input_reader: BaseInputReader):
+        # create data loader
+        dataset.switch_mode(Dataset.EVAL_MODE)
+        data_loader = DataLoader(dataset, batch_size=self._args.eval_batch_size, shuffle=False, drop_last=False,
+                                 num_workers=self._args.sampling_processes, collate_fn=sampling.collate_fn_padding)
+
+        pred_entities = []
+        pred_relations = []
+
+        with torch.no_grad():
+            model.eval()
+
+            # iterate batches
+            total = math.ceil(dataset.document_count / self._args.eval_batch_size)
+            for batch in tqdm(data_loader, total=total, desc='Predict'):
+                # move batch to selected device
+                batch = util.to_device(batch, self._device)
+
+                # run model (forward pass)
+                result = model(encodings=batch['encodings'], context_masks=batch['context_masks'],
+                               entity_masks=batch['entity_masks'], entity_sizes=batch['entity_sizes'],
+                               entity_spans=batch['entity_spans'], entity_sample_masks=batch['entity_sample_masks'],
+                               inference=True)
+                entity_clf, rel_clf, rels = result
+
+                # convert predictions
+                predictions = prediction.convert_predictions(entity_clf, rel_clf, rels,
+                                                             batch, self._args.rel_filter_threshold,
+                                                             input_reader)
+
+                batch_pred_entities, batch_pred_relations = predictions
+                pred_entities.extend(batch_pred_entities)
+                pred_relations.extend(batch_pred_relations)
+
+        prediction.store_predictions(dataset.documents, pred_entities, pred_relations, self._args.predictions_path)
 
     def _get_optimizer_params(self, model):
         param_optimizer = list(model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_params = [
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
-             'weight_decay': self.args.weight_decay},
+             'weight_decay': self._args.weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
 
         return optimizer_params
@@ -271,7 +304,7 @@ class SpERTTrainer(BaseTrainer):
     def _log_train(self, optimizer: Optimizer, loss: float, epoch: int,
                    iteration: int, global_iteration: int, label: str):
         # average loss
-        avg_loss = loss / self.args.train_batch_size
+        avg_loss = loss / self._args.train_batch_size
         # get current learning rate
         lr = self._get_lr(optimizer)[0]
 
@@ -345,8 +378,6 @@ class SpERTTrainer(BaseTrainer):
             self._logger.info("Document count: %s" % d.document_count)
             self._logger.info("Relation count: %s" % d.relation_count)
             self._logger.info("Entity count: %s" % d.entity_count)
-
-        self._logger.info("Context size: %s" % input_reader.context_size)
 
     def _init_train_logging(self, label):
         self._add_dataset_logging(label,

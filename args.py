@@ -14,25 +14,13 @@ def _add_common_args(arg_parser):
                             help="If true, input is lowercased during preprocessing")
     arg_parser.add_argument('--sampling_processes', type=int, default=4,
                             help="Number of sampling processes. 0 = no multiprocessing for sampling")
-    arg_parser.add_argument('--sampling_limit', type=int, default=100, help="Maximum number of sample batches in queue")
-
-    # Logging
-    arg_parser.add_argument('--label', type=str, help="Label of run. Used as the directory name of logs/models")
-    arg_parser.add_argument('--log_path', type=str, help="Path do directory where training/evaluation logs are stored")
-    arg_parser.add_argument('--store_predictions', action='store_true', default=False,
-                            help="If true, store predictions on disc (in log directory)")
-    arg_parser.add_argument('--store_examples', action='store_true', default=False,
-                            help="If true, store evaluation examples on disc (in log directory)")
-    arg_parser.add_argument('--example_count', type=int, default=None,
-                            help="Count of evaluation example to store (if store_examples == True)")
-    arg_parser.add_argument('--debug', action='store_true', default=False, help="Debugging mode on/off")
 
     # Model / Training / Evaluation
     arg_parser.add_argument('--model_path', type=str, help="Path to directory that contains model checkpoints")
     arg_parser.add_argument('--model_type', type=str, default="spert", help="Type of model")
     arg_parser.add_argument('--cpu', action='store_true', default=False,
                             help="If true, train/evaluate on CPU even if a CUDA device is available")
-    arg_parser.add_argument('--eval_batch_size', type=int, default=1, help="Evaluation batch size")
+    arg_parser.add_argument('--eval_batch_size', type=int, default=1, help="Evaluation/Prediction batch size")
     arg_parser.add_argument('--max_pairs', type=int, default=1000,
                             help="Maximum entity pairs to process during training/evaluation")
     arg_parser.add_argument('--rel_filter_threshold', type=float, default=0.4, help="Filter threshold for relations")
@@ -47,6 +35,18 @@ def _add_common_args(arg_parser):
     arg_parser.add_argument('--seed', type=int, default=None, help="Seed")
     arg_parser.add_argument('--cache_path', type=str, default=None,
                             help="Path to cache transformer models (for HuggingFace transformers library)")
+    arg_parser.add_argument('--debug', action='store_true', default=False, help="Debugging mode on/off")
+
+
+def _add_logging_args(arg_parser):
+    arg_parser.add_argument('--label', type=str, help="Label of run. Used as the directory name of logs/models")
+    arg_parser.add_argument('--log_path', type=str, help="Path do directory where training/evaluation logs are stored")
+    arg_parser.add_argument('--store_predictions', action='store_true', default=False,
+                            help="If true, store predictions on disc (in log directory)")
+    arg_parser.add_argument('--store_examples', action='store_true', default=False,
+                            help="If true, store evaluation examples on disc (in log directory)")
+    arg_parser.add_argument('--example_count', type=int, default=None,
+                            help="Count of evaluation example to store (if store_examples == True)")
 
 
 def train_argparser():
@@ -80,6 +80,7 @@ def train_argparser():
     arg_parser.add_argument('--max_grad_norm', type=float, default=1.0, help="Maximum gradient norm")
 
     _add_common_args(arg_parser)
+    _add_logging_args(arg_parser)
 
     return arg_parser
 
@@ -89,6 +90,20 @@ def eval_argparser():
 
     # Input
     arg_parser.add_argument('--dataset_path', type=str, help="Path to dataset")
+
+    _add_common_args(arg_parser)
+    _add_logging_args(arg_parser)
+
+    return arg_parser
+
+
+def predict_argparser():
+    arg_parser = argparse.ArgumentParser()
+
+    # Input
+    arg_parser.add_argument('--dataset_path', type=str, help="Path to dataset")
+    arg_parser.add_argument('--predictions_path', type=str, help="Path to store predictions")
+    arg_parser.add_argument('--spacy_model', type=str, help="Label of SpaCy model (used for tokenization)")
 
     _add_common_args(arg_parser)
 
