@@ -1,4 +1,4 @@
-Jinja2==2.10.3
+Jinja2==2.11.3
 numpy==1.17.4
 tensorboardX==1.6
 torch==1.4.0
