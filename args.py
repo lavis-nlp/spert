@@ -62,7 +62,7 @@ def train_argparser():
                             help="If true, evaluate validation set before training")
     arg_parser.add_argument('--save_optimizer', action='store_true', default=False,
                             help="Save optimizer alongside model")
-    arg_parser.add_argument('--train_log_iter', type=int, default=1, help="Log training process every x iterations")
+    arg_parser.add_argument('--train_log_iter', type=int, default=100, help="Log training process every x iterations")
     arg_parser.add_argument('--final_eval', action='store_true', default=False,
                             help="Evaluate the model only after training, not at every epoch")
 
