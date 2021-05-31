@@ -1,5 +1,5 @@
 # SpERT: Span-based Entity and Relation Transformer
-PyTorch code for SpERT: "Span-based Entity and Relation Transformer". For a description of the model and experiments, see our paper: https://arxiv.org/abs/1909.07755 (accepted at ECAI 2020).
+PyTorch code for SpERT: "Span-based Entity and Relation Transformer". For a description of the model and experiments, see our paper: https://ebooks.iospress.nl/volumearticle/55116 (accepted at ECAI 2020).
 
 ![alt text](http://deepca.cs.hs-rm.de/img/deepca/spert.png)
 
