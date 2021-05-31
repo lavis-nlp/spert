@@ -233,6 +233,8 @@ def _parse_tokens(jtokens, dataset, tokenizer):
     # parse tokens
     for i, token_phrase in enumerate(jtokens):
         token_encoding = tokenizer.encode(token_phrase, add_special_tokens=False)
+        if not token_encoding:
+            token_encoding = [tokenizer.convert_tokens_to_ids('[UNK]')]
         span_start, span_end = (len(doc_encoding), len(doc_encoding) + len(token_encoding))
 
         token = dataset.create_token(i, span_start, span_end, token_phrase)
