@@ -1,5 +1,5 @@
 # SpERT: Span-based Entity and Relation Transformer
-PyTorch code for SpERT: "Span-based Entity and Relation Transformer". For a description of the model and experiments, see our paper: https://ebooks.iospress.nl/volumearticle/55116 (accepted at ECAI 2020).
+PyTorch code for SpERT: "Span-based Entity and Relation Transformer". For a description of the model and experiments, see our paper: https://arxiv.org/abs/1909.07755 (published at ECAI 2020).
 
 ![alt text](http://deepca.cs.hs-rm.de/img/deepca/spert.png)
 
@@ -49,7 +49,9 @@ python ./spert.py predict --config configs/example_predict.conf
 - To train SpERT with SciBERT \[5\] download SciBERT from https://github.com/allenai/scibert (under "PyTorch HuggingFace Models") and set "model_path" and "tokenizer_path" in the config file to point to the SciBERT directory.
 - You can call "python ./spert.py train --help" / "python ./spert.py eval --help" "python ./spert.py predict --help" for a description of training/evaluation/prediction arguments.
 - Please cite our paper when you use SpERT: <br/>
+```
 Markus Eberts, Adrian Ulges. Span-based Joint Entity and Relation Extraction with Transformer Pre-training. 24th European Conference on Artificial Intelligence, 2020.
+```
 
 ## References
 ```
