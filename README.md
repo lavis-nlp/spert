@@ -51,6 +51,7 @@ python ./spert.py predict --config configs/example_predict.conf
 
 ## Additional Notes
 - To train SpERT with SciBERT \[5\] download SciBERT from https://github.com/allenai/scibert (under "PyTorch HuggingFace Models") and set "model_path" and "tokenizer_path" in the config file to point to the SciBERT directory.
+- If the model predicts many false positive entity mentions, try to increase the number of negative entity samples ('neg_entity_count' in config file).
 - You can call "python ./spert.py train --help" / "python ./spert.py eval --help" "python ./spert.py predict --help" for a description of training/evaluation/prediction arguments.
 - Please cite our paper when you use SpERT: <br/>
 ```
