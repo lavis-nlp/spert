@@ -44,8 +44,12 @@ python ./spert.py eval --config configs/example_eval.conf
 ```
 python ./spert.py predict --config configs/example_predict.conf
 ```
+## Reproduction of Experimental Results
+- The final models were trained on the combined train+dev datasets.
+- Reproduction of SciERC results: To add a feature, the sampling of negative relations for symmetric relations needed to be changed in commit 7b27b7d . This leads to a slight improvement in experimental results for SciERC. Please use commit 3f4ab22857f9ca0d96b582084a2a0ceb3e9826f9 if you want an exact reproduction.
 
-## Notes
+
+## Additional Notes
 - To train SpERT with SciBERT \[5\] download SciBERT from https://github.com/allenai/scibert (under "PyTorch HuggingFace Models") and set "model_path" and "tokenizer_path" in the config file to point to the SciBERT directory.
 - You can call "python ./spert.py train --help" / "python ./spert.py eval --help" "python ./spert.py predict --help" for a description of training/evaluation/prediction arguments.
 - Please cite our paper when you use SpERT: <br/>
