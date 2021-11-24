@@ -46,7 +46,7 @@ python ./spert.py predict --config configs/example_predict.conf
 ```
 ## Reproduction of Experimental Results
 - The final models were trained on the combined train+dev datasets.
-- Reproduction of SciERC results: To add a feature, the sampling of negative relations for symmetric relations needed to be changed in commit 7b27b7d . This leads to a slight improvement in experimental results for SciERC. Please use commit 3f4ab22857f9ca0d96b582084a2a0ceb3e9826f9 if you want an exact reproduction.
+- Reproduction of SciERC results: To add a feature, the sampling of negative relations for symmetric relations needed to be changed in commit [7b27b7d](https://github.com/lavis-nlp/spert/commit/7b27b7d258d0b4bb44103b9d0f9e19f2ce08611f). This leads to a slight improvement in experimental results for SciERC. Please use commit [3f4ab22](https://github.com/lavis-nlp/spert/commit/3f4ab22857f9ca0d96b582084a2a0ceb3e9826f9) if you want an exact reproduction.
 
 
 ## Additional Notes
