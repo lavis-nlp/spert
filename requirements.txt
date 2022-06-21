@@ -1,5 +1,5 @@
 Jinja2==2.11.3
-numpy==1.17.4
+numpy==1.22.0
 tensorboardX==1.6
 torch==1.4.0
 tqdm==4.55.1
